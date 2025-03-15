@@ -163,10 +163,24 @@ export async function redirectToCheckout() {
     amount: totalAmount,
     description: "Cart",
     merchantReferenceId: crypto.randomUUID(),
-    completeCheckoutUrl:
-      process.env.NEXT_PUBLIC_VERCEL_URL + "/order-successful",
-    cancelCheckoutUrl: process.env.NEXT_PUBLIC_VERCEL_URL + "/order-error",
+    completeCheckoutUrl: getBaseCheckoutRedirectUrl() + "/order-successful",
+    cancelCheckoutUrl: getBaseCheckoutRedirectUrl() + "/order-error",
   });
 
   redirect(checkout.redirect_url);
 }
+
+const getBaseCheckoutRedirectUrl = () => {
+  const url = process.env.NEXT_PUBLIC_VERCEL_URL;
+
+  if (!url) {
+    throw new Error("NEXT_PUBLIC_VERCEL_URL is not set");
+  }
+
+  // if the url doesn't start with https://, add it
+  if (!url.startsWith("https://")) {
+    return "https://" + url;
+  }
+
+  return url;
+};
