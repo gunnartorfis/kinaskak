@@ -159,6 +159,9 @@ export async function redirectToCheckout() {
     0
   );
 
+  console.log(cart);
+  console.log(totalAmount);
+
   const checkout = await createCheckout({
     amount: totalAmount,
     description: "Cart",
