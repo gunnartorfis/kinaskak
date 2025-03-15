@@ -1,10 +1,21 @@
-import { AddToCart } from 'components/cart/add-to-cart';
-import Price from 'components/price';
-import Prose from 'components/prose';
-import { Product } from 'lib/shopify/types';
-import { VariantSelector } from './variant-selector';
+"use client";
+
+import { AddToCart } from "components/cart/add-to-cart";
+import Price from "components/price";
+import Prose from "components/prose";
+import { Product, ProductVariant } from "lib/store/types";
+import { useProduct } from "./product-context";
+import { VariantSelector } from "./variant-selector";
 
 export function ProductDescription({ product }: { product: Product }) {
+  const { updateOption } = useProduct();
+
+  const handleVariantChange = (variant: ProductVariant) => {
+    variant.selectedOptions.forEach(({ name, value }) => {
+      updateOption(name, value);
+    });
+  };
+
   return (
     <>
       <div className="mb-6 flex flex-col border-b pb-6 dark:border-neutral-700">
@@ -16,7 +27,12 @@ export function ProductDescription({ product }: { product: Product }) {
           />
         </div>
       </div>
-      <VariantSelector options={product.options} variants={product.variants} />
+      <VariantSelector
+        options={product.options}
+        variants={product.variants}
+        selectedVariant={product.variants[0]!}
+        onVariantChange={handleVariantChange}
+      />
       {product.descriptionHtml ? (
         <Prose
           className="mb-6 text-sm leading-tight dark:text-white/[60%]"
