@@ -1,10 +1,15 @@
-import { getCollections } from "@/lib/store/products";
+"use client";
+
+import { Collection } from "@/lib/store/types";
 import clsx from "clsx";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export default async function Collections() {
-  const collections = await getCollections();
+export default async function Collections({
+  collections,
+}: {
+  collections: Collection[];
+}) {
   const pathname = usePathname();
 
   return (
