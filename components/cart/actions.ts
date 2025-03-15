@@ -163,8 +163,9 @@ export async function redirectToCheckout() {
     amount: totalAmount,
     description: "Cart",
     merchantReferenceId: crypto.randomUUID(),
-    completeCheckoutUrl: process.env.NEXT_PUBLIC_APP_URL + "/order-successful",
-    cancelCheckoutUrl: process.env.NEXT_PUBLIC_APP_URL + "/order-error",
+    completeCheckoutUrl:
+      process.env.NEXT_PUBLIC_VERCEL_URL + "/order-successful",
+    cancelCheckoutUrl: process.env.NEXT_PUBLIC_VERCEL_URL + "/order-error",
   });
 
   redirect(checkout.redirect_url);
