@@ -53,7 +53,7 @@ export default function CartModal() {
       id: item.merchandise.product.id,
       quantity: item.quantity,
     })),
-    email: cart.email,
+    // email: cart.email,
   });
 
   return (
