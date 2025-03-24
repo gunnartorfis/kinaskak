@@ -1,20 +1,25 @@
 "use server";
 
+import {
+  sendCompanyNotificationEmail,
+  sendOrderConfirmationEmail,
+} from "@/lib/email";
 import { createCheckout } from "@/lib/rapyd/checkout";
-import { getProductById } from "@/lib/store/products";
+import { getProductById, getProductsByIds } from "@/lib/store/products";
 import { TAGS } from "lib/constants";
 import { revalidateTag } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-interface Cart {
-  id: string;
-}
-
 export interface CartItem {
   id: string;
   quantity: number;
   amount: number;
+}
+
+export interface CheckoutItem {
+  id: string;
+  quantity: number;
 }
 
 const CART_COOKIE = "cart";
@@ -152,23 +157,55 @@ export async function createCartAndSetCookie() {
   (await cookies()).set("cartId", cart.id!);
 }
 
-export async function redirectToCheckout() {
-  let cart = await getCart();
-  const totalAmount = cart.reduce(
+export async function redirectToCheckout({ items }: { items: CheckoutItem[] }) {
+  const products = await getProductsByIds({
+    ids: items.map((item) => item.id),
+  });
+  const cartItems = items.map(({ id, quantity }) => {
+    const item = products.find((product) => product.id === id);
+    const amount = item?.variants[0]?.price.amount ?? "0";
+    return {
+      id,
+      quantity,
+      amount: parseFloat(amount),
+      name: item?.title ?? "Unknown Product",
+    };
+  });
+
+  const totalAmount = cartItems.reduce(
     (acc, item) => acc + item.quantity * item.amount,
     0
   );
 
-  console.log(cart);
-  console.log(totalAmount);
-
+  const merchantReferenceId = crypto.randomUUID();
   const checkout = await createCheckout({
     amount: totalAmount,
     description: "Cart",
-    merchantReferenceId: crypto.randomUUID(),
+    merchantReferenceId,
     completeCheckoutUrl: getBaseCheckoutRedirectUrl() + "/order-successful",
     cancelCheckoutUrl: getBaseCheckoutRedirectUrl() + "/order-error",
   });
+
+  const orderDetails = {
+    items: cartItems,
+    totalAmount,
+    merchantReferenceId,
+  };
+
+  try {
+    // Send both emails in parallel
+    await Promise.all([
+      sendOrderConfirmationEmail(orderDetails),
+      sendCompanyNotificationEmail(orderDetails),
+    ]);
+  } catch (error) {
+    console.error("Failed to send order emails:", error);
+    // Continue with checkout even if emails fail
+  }
+
+  // clear cart cookie
+  const cookieStore = await cookies();
+  cookieStore.delete("cart");
 
   redirect(checkout.redirect_url);
 }

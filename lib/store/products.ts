@@ -98,6 +98,14 @@ export const getProductById = ({
   return Promise.resolve(products.find((p) => p.id === id));
 };
 
+export const getProductsByIds = ({
+  ids,
+}: {
+  ids: string[];
+}): Promise<Product[]> => {
+  return Promise.resolve(products.filter((p) => ids.includes(p.id)));
+};
+
 export const getProducts = ({
   query,
   reverse,

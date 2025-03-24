@@ -1,10 +1,5 @@
 import { getMenu } from "@/lib/store/menu";
 import CartModal from "components/cart/modal";
-import LogoSquare from "components/logo-square";
-import Link from "next/link";
-import { Suspense } from "react";
-import MobileMenu from "./mobile-menu";
-import Search, { SearchSkeleton } from "./search";
 
 const { SITE_NAME } = process.env;
 
@@ -13,13 +8,13 @@ export async function Navbar() {
 
   return (
     <nav className="relative flex items-center justify-between p-4 lg:px-6">
-      <div className="block flex-none md:hidden">
+      {/* <div className="block flex-none md:hidden">
         <Suspense fallback={null}>
           <MobileMenu menu={menu} />
         </Suspense>
-      </div>
-      <div className="flex w-full items-center">
-        <div className="flex w-full md:w-1/3">
+      </div> */}
+      <div className="flex w-full justify-end items-center">
+        {/* <div className="flex w-full md:w-1/3">
           <Link
             href="/"
             prefetch={true}
@@ -45,12 +40,12 @@ export async function Navbar() {
               ))}
             </ul>
           ) : null}
-        </div>
-        <div className="hidden justify-center md:flex md:w-1/3">
+        </div> */}
+        {/* <div className="hidden justify-center md:flex md:w-1/3">
           <Suspense fallback={<SearchSkeleton />}>
             <Search />
           </Suspense>
-        </div>
+        </div> */}
         <div className="flex justify-end md:w-1/3">
           <CartModal />
         </div>

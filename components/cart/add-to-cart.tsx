@@ -37,14 +37,14 @@ function SubmitButton({
         <div className="absolute left-0 ml-4">
           <PlusIcon className="h-5" />
         </div>
-        Add To Cart
+        Bæta í körfu
       </button>
     );
   }
 
   return (
     <button
-      aria-label="Add to cart"
+      aria-label="Bæta í körfu"
       className={clsx(buttonClasses, {
         "hover:opacity-90": true,
       })}
@@ -52,7 +52,7 @@ function SubmitButton({
       <div className="absolute left-0 ml-4">
         <PlusIcon className="h-5" />
       </div>
-      Add To Cart
+      Bæta í körfu
     </button>
   );
 }
@@ -63,7 +63,7 @@ export function AddToCart({ product }: { product: Product }) {
   const { state } = useProduct();
   const [message, formAction] = useActionState(
     addItem,
-    "Error adding item to cart"
+    "Villa að bæta í körfu"
   );
 
   const variant = variants.find((variant: ProductVariant) =>

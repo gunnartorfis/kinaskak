@@ -27,12 +27,14 @@ export function ProductDescription({ product }: { product: Product }) {
           />
         </div>
       </div>
-      <VariantSelector
-        options={product.options}
-        variants={product.variants}
-        selectedVariant={product.variants[0]!}
-        onVariantChange={handleVariantChange}
-      />
+      {product.variants.length > 1 ? (
+        <VariantSelector
+          options={product.options}
+          variants={product.variants}
+          selectedVariant={product.variants[0]!}
+          onVariantChange={handleVariantChange}
+        />
+      ) : null}
       {product.descriptionHtml ? (
         <Prose
           className="mb-6 text-sm leading-tight dark:text-white/[60%]"
