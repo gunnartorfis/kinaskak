@@ -9,12 +9,8 @@ import {
   removeFromCart as removeFromCartDb,
   updateCartItemQuantity as updateCartItemQuantityDb,
 } from "@/lib/dal/cart";
-import {
-  sendCompanyNotificationEmail,
-  sendOrderConfirmationEmail,
-} from "@/lib/email";
 import { createCheckout } from "@/lib/rapyd/checkout";
-import { getProductById, getProductsByIds } from "@/lib/store/products";
+import { getProductsByIds } from "@/lib/store/products";
 import { TAGS } from "lib/constants";
 import { revalidateTag } from "next/cache";
 import { cookies } from "next/headers";
@@ -50,42 +46,35 @@ const getCartId = async () => {
 };
 
 const getProductVariant = async (
-  productId: string
+  variantId: string
 ): Promise<DbProductVariant | null> => {
   const supabase = await createClient();
   const { data: variant } = await supabase
     .from("product_variants")
     .select("*")
-    .eq("product_id", productId)
+    .eq("id", variantId)
     .limit(1)
     .single();
 
   return variant;
 };
 
-export const addToCart = async (productId: string) => {
+export const addToCart = async (variantId: string) => {
   const cartId = await getCartId();
-  const product = await getProductById({ id: productId });
-  if (!product) return;
-
-  const variant = await getProductVariant(productId);
+  const variant = await getProductVariant(variantId);
   if (!variant) return;
-
   await addToCartDb({
     cartId,
-    productId,
+    productId: variant.product_id,
     variantId: variant.id,
   });
 
   return calculateCartTotals(cartId);
 };
 
-export const removeFromCart = async (productId: string) => {
+export const removeFromCart = async (variantId: string) => {
   const cartId = await getCartId();
-  const product = await getProductById({ id: productId });
-  if (!product) return;
-
-  const variant = await getProductVariant(productId);
+  const variant = await getProductVariant(variantId);
   if (!variant) return;
 
   await removeFromCartDb({
@@ -97,14 +86,11 @@ export const removeFromCart = async (productId: string) => {
 };
 
 export const updateCartItemQuantity = async (
-  productId: string,
+  variantId: string,
   quantity: number
 ) => {
   const cartId = await getCartId();
-  const product = await getProductById({ id: productId });
-  if (!product) return;
-
-  const variant = await getProductVariant(productId);
+  const variant = await getProductVariant(variantId);
   if (!variant) return;
 
   await updateCartItemQuantityDb({
@@ -134,13 +120,13 @@ export async function addItem(selectedVariantId: string | undefined) {
   }
 }
 
-export async function removeItem(merchandiseId: string | undefined) {
-  if (!merchandiseId) {
-    return "Missing product ID";
+export async function removeItem(selectedVariantId: string | undefined) {
+  if (!selectedVariantId) {
+    return "Missing product variant ID";
   }
 
   try {
-    await removeFromCart(merchandiseId);
+    await removeFromCart(selectedVariantId);
     revalidateTag(TAGS.cart);
   } catch (e) {
     return "Error removing item from cart";
@@ -148,15 +134,15 @@ export async function removeItem(merchandiseId: string | undefined) {
 }
 
 export async function updateItemQuantity(
-  merchandiseId: string | undefined,
+  variantId: string | undefined,
   quantity: number
 ) {
-  if (!merchandiseId) {
-    return "Missing product ID";
+  if (!variantId) {
+    return "Missing product variant ID";
   }
 
   try {
-    await updateCartItemQuantity(merchandiseId, quantity);
+    await updateCartItemQuantity(variantId, quantity);
     revalidateTag(TAGS.cart);
   } catch (e) {
     return "Error updating item quantity";
@@ -209,14 +195,7 @@ export async function redirectToCheckout({ items }: { items: CheckoutItem[] }) {
     merchantReferenceId,
   };
 
-  try {
-    await Promise.all([
-      sendOrderConfirmationEmail(orderDetails),
-      sendCompanyNotificationEmail(orderDetails),
-    ]);
-  } catch (error) {
-    console.error("Failed to send order emails:", error);
-  }
+  // TODO: we need to store something in the database here!
 
   // Clear cart after successful checkout
   const cartId = await getCartId();

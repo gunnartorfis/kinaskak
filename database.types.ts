@@ -276,7 +276,7 @@ export type Database = {
           is_available: boolean | null
           name: string
           price_adjustment: number | null
-          product_id: string | null
+          product_id: string
           sku: string | null
           updated_at: string | null
         }
@@ -286,7 +286,7 @@ export type Database = {
           is_available?: boolean | null
           name: string
           price_adjustment?: number | null
-          product_id?: string | null
+          product_id: string
           sku?: string | null
           updated_at?: string | null
         }
@@ -296,7 +296,7 @@ export type Database = {
           is_available?: boolean | null
           name?: string
           price_adjustment?: number | null
-          product_id?: string | null
+          product_id?: string
           sku?: string | null
           updated_at?: string | null
         }

@@ -4,126 +4,87 @@ import { Database } from "@/database.types";
 import { createContext, useContext, useReducer } from "react";
 
 type DbProduct = Database["public"]["Tables"]["products"]["Row"];
+type DbCart = Database["public"]["Tables"]["carts"]["Row"];
 type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
+type DbCartItem = Database["public"]["Tables"]["cart_items"]["Row"];
 
-type CartItem = {
-  merchandise: DbProductVariant & {
-    product: DbProduct;
-  };
-  quantity: number;
-};
+type CartContextStateItem = Pick<
+  DbCartItem,
+  "product_id" | "quantity" | "variant_id"
+>;
 
-export type CartState = {
-  items: CartItem[];
+interface CartContextState {
+  items: CartContextStateItem[];
   status: "idle" | "loading" | "error";
-  totalQuantity: number;
-  cost: {
-    subtotalAmount: {
-      amount: string;
-      currencyCode: string;
-    };
-    totalAmount: {
-      amount: string;
-      currencyCode: string;
-    };
-    totalTaxAmount: {
-      amount: string;
-      currencyCode: string;
-    };
-  };
-};
+}
 
 type CartAction =
-  | { type: "ADD_ITEM"; payload: CartItem }
-  | { type: "REMOVE_ITEM"; payload: { merchandiseId: string } }
+  | { type: "ADD_ITEM"; payload: CartContextStateItem }
+  | { type: "REMOVE_ITEM"; payload: CartContextStateItem }
   | {
       type: "UPDATE_ITEM_QUANTITY";
-      payload: { merchandiseId: string; quantity: number };
+      payload: CartContextStateItem;
     }
-  | { type: "SET_STATUS"; payload: CartState["status"] }
-  | { type: "UPDATE_COST"; payload: CartState["cost"] };
+  | { type: "SET_STATUS"; payload: CartContextState["status"] }
+  | { type: "SET_ITEMS"; payload: CartContextStateItem[] };
 
 const CartContext = createContext<
   | {
-      cart: CartState;
-      addItem: (item: CartItem) => void;
-      removeItem: (merchandiseId: string) => void;
-      updateItemQuantity: (merchandiseId: string, quantity: number) => void;
-      updateCartItem: (merchandiseId: string, quantity: number) => void;
+      cart: CartContextState;
+      addItem: (item: CartContextState["items"][number]) => void;
+      removeItem: (item: CartContextState["items"][number]) => void;
+      updateItemQuantity: (item: CartContextState["items"][number]) => void;
     }
   | undefined
 >(undefined);
 
-const calculateTotalQuantity = (items: CartItem[]) =>
-  items.reduce((total, item) => total + item.quantity, 0);
-
-const calculateCost = (items: CartItem[]) => {
-  const subtotal = items.reduce(
-    (total, item) =>
-      total + (item.merchandise.price_adjustment || 0) * item.quantity,
-    0
-  );
-
-  return {
-    subtotalAmount: {
-      amount: subtotal.toString(),
-      currencyCode: "ISK",
-    },
-    totalAmount: {
-      amount: subtotal.toString(),
-      currencyCode: "ISK",
-    },
-    totalTaxAmount: {
-      amount: "0",
-      currencyCode: "ISK",
-    },
-  };
-};
-
-const cartReducer = (state: CartState, action: CartAction): CartState => {
+const cartReducer = (
+  state: CartContextState,
+  action: CartAction
+): CartContextState => {
   switch (action.type) {
     case "ADD_ITEM": {
-      const existingItem = state.items.find(
-        (item) => item.merchandise.id === action.payload.merchandise.id
+      const existingItemIndex = state.items.findIndex(
+        (item) =>
+          item.product_id === action.payload.product_id &&
+          item.variant_id === action.payload.variant_id
       );
 
-      const newItems = existingItem
-        ? state.items.map((item) =>
-            item.merchandise.id === action.payload.merchandise.id
-              ? { ...item, quantity: item.quantity + action.payload.quantity }
-              : item
-          )
-        : [...state.items, action.payload];
+      const newItems =
+        existingItemIndex >= 0
+          ? state.items.map((item, index) =>
+              index === existingItemIndex
+                ? { ...item, quantity: item.quantity + action.payload.quantity }
+                : item
+            )
+          : [...state.items, action.payload];
 
       return {
         ...state,
         items: newItems,
-        totalQuantity: calculateTotalQuantity(newItems),
-        cost: calculateCost(newItems),
       };
     }
     case "REMOVE_ITEM": {
       const newItems = state.items.filter(
-        (item) => item.merchandise.id !== action.payload.merchandiseId
+        (item) =>
+          item.product_id !== action.payload.product_id &&
+          item.variant_id !== action.payload.variant_id
       );
       return {
         ...state,
         items: newItems,
-        totalQuantity: calculateTotalQuantity(newItems),
-        cost: calculateCost(newItems),
       };
     }
     case "UPDATE_ITEM_QUANTITY": {
       const newItems = state.items.map((item) =>
-        item.merchandise.id === action.payload.merchandiseId
+        item.product_id === action.payload.product_id &&
+        item.variant_id === action.payload.variant_id
           ? { ...item, quantity: action.payload.quantity }
           : item
       );
       return {
         ...state,
         items: newItems,
-        totalQuantity: calculateTotalQuantity(newItems),
-        cost: calculateCost(newItems),
       };
     }
     case "SET_STATUS":
@@ -131,10 +92,10 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
         ...state,
         status: action.payload,
       };
-    case "UPDATE_COST":
+    case "SET_ITEMS":
       return {
         ...state,
-        cost: action.payload,
+        items: action.payload,
       };
     default:
       return state;
@@ -145,43 +106,26 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   const [cart, dispatch] = useReducer(cartReducer, {
     items: [],
     status: "idle",
-    totalQuantity: 0,
-    cost: {
-      subtotalAmount: {
-        amount: "0",
-        currencyCode: "ISK",
-      },
-      totalAmount: {
-        amount: "0",
-        currencyCode: "ISK",
-      },
-      totalTaxAmount: {
-        amount: "0",
-        currencyCode: "ISK",
-      },
-    },
   });
 
-  const addItem = (item: CartItem) => {
+  const addItem = (item: CartContextState["items"][number]) => {
     dispatch({ type: "ADD_ITEM", payload: item });
   };
 
-  const removeItem = (merchandiseId: string) => {
-    dispatch({ type: "REMOVE_ITEM", payload: { merchandiseId } });
+  const removeItem = (item: CartContextState["items"][number]) => {
+    dispatch({ type: "REMOVE_ITEM", payload: item });
   };
 
-  const updateItemQuantity = (merchandiseId: string, quantity: number) => {
+  const updateItemQuantity = (item: CartContextState["items"][number]) => {
     dispatch({
       type: "UPDATE_ITEM_QUANTITY",
-      payload: { merchandiseId, quantity },
+      payload: item,
     });
   };
 
-  const updateCartItem = updateItemQuantity;
-
   return (
     <CartContext.Provider
-      value={{ cart, addItem, removeItem, updateItemQuantity, updateCartItem }}
+      value={{ cart, addItem, removeItem, updateItemQuantity }}
     >
       {children}
     </CartContext.Provider>
@@ -194,4 +138,10 @@ export const useCart = () => {
     throw new Error("useCart must be used within a CartProvider");
   }
   return context;
+};
+
+// Helper hooks for derived state
+export const useCartQuantity = () => {
+  const { cart } = useCart();
+  return cart.items.reduce((total, item) => total + item.quantity, 0);
 };

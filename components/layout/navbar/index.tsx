@@ -1,4 +1,4 @@
-import { CartButton } from "@/components/cart/cart-button";
+import CartModal from "@/components/cart/modal";
 import { getMenu } from "@/lib/store/menu";
 
 const { SITE_NAME } = process.env;
@@ -47,7 +47,7 @@ export async function Navbar() {
           </Suspense>
         </div> */}
         <div className="flex justify-end md:w-1/3">
-          <CartButton />
+          <CartModal />
         </div>
       </div>
     </nav>

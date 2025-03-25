@@ -84,13 +84,14 @@ export const runtime = "edge";
 export default async function ProductPage({
   params,
 }: {
-  params: { handle: string };
+  params: Promise<{ handle: string }>;
 }) {
-  const dbProduct = await getProduct(params.handle);
+  const handle = (await params).handle;
+  const dbProduct = await getProduct(handle);
   const variants = await getProductVariants(dbProduct?.id || "");
 
   if (!dbProduct) {
-    notFound();
+    return notFound();
   }
 
   const product = enrichProduct(dbProduct);

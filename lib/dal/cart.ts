@@ -1,11 +1,37 @@
-import { CartState } from "@/components/cart/cart-context";
+import { Database } from "@/database.types";
 import { createClient } from "@/db/supabase/server";
-import { getProductById, getProductsByIds } from "@/lib/store/products";
+import { getProductsByIds } from "@/lib/store/products";
+
+type DbProduct = Database["public"]["Tables"]["products"]["Row"];
+type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
+type DbCartItem = Database["public"]["Tables"]["cart_items"]["Row"];
+type DbCart = Database["public"]["Tables"]["carts"]["Row"];
+
+interface CartItemWithDetails extends DbCartItem {
+  product: DbProduct;
+  variant: DbProductVariant;
+}
+
+interface CartTotals {
+  subtotalAmount: {
+    amount: string;
+    currencyCode: string;
+  };
+  totalAmount: {
+    amount: string;
+    currencyCode: string;
+  };
+  totalTaxAmount: {
+    amount: string;
+    currencyCode: string;
+  };
+  totalQuantity: number;
+}
 
 const VAT_RATE = 0.24;
 const VAT_MULTIPLIER = 1 + VAT_RATE;
 
-export const getOrCreateCart = async (userId?: string) => {
+export const getOrCreateCart = async (userId?: string): Promise<DbCart> => {
   const supabase = await createClient();
 
   // If user is logged in, try to find their cart
@@ -32,25 +58,42 @@ export const getOrCreateCart = async (userId?: string) => {
   return newCart;
 };
 
-export const getCartItems = async (cartId: string) => {
+export const getCartItems = async (
+  cartId: string
+): Promise<CartItemWithDetails[]> => {
   const supabase = await createClient();
   const { data: items } = await supabase
     .from("cart_items")
     .select("*")
     .eq("cart_id", cartId);
 
-  const productIds: string[] = items?.map((item) => item.product_id!) ?? [];
+  if (!items) return [];
+
+  const productIds = items.map((item) => item.product_id!).filter(Boolean);
   const products = await getProductsByIds({ ids: productIds });
+  const productsMap = Object.fromEntries(products.map((p) => [p.id, p]));
 
-  const cartItemsWithProducts = items?.map((item) => {
-    const product = products.find((p) => p.id === item.product_id);
-    return {
+  // Fetch all variants in parallel
+  const variantIds = items.map((item) => item.variant_id!).filter(Boolean);
+  const { data: variants } = await supabase
+    .from("product_variants")
+    .select("*")
+    .in("id", variantIds);
+  const variantsMap = Object.fromEntries(
+    (variants ?? []).map((v) => [v.id, v])
+  );
+
+  // Filter out items with missing products or variants
+  return items
+    .map((item) => ({
       ...item,
-      product,
-    };
-  });
-
-  return cartItemsWithProducts || [];
+      product: productsMap[item.product_id ?? ""],
+      variant: variantsMap[item.variant_id ?? ""],
+    }))
+    .filter(
+      (item): item is CartItemWithDetails =>
+        item.product !== undefined && item.variant !== undefined
+    );
 };
 
 export const addToCart = async ({
@@ -63,7 +106,7 @@ export const addToCart = async ({
   productId: string;
   variantId: string;
   quantity?: number;
-}) => {
+}): Promise<void> => {
   const supabase = await createClient();
 
   // Check if item already exists in cart
@@ -105,7 +148,7 @@ export const updateCartItemQuantity = async ({
   cartId: string;
   variantId: string;
   quantity: number;
-}) => {
+}): Promise<void> => {
   const supabase = await createClient();
 
   if (quantity <= 0) {
@@ -135,7 +178,7 @@ export const removeFromCart = async ({
 }: {
   cartId: string;
   variantId: string;
-}) => {
+}): Promise<void> => {
   const supabase = await createClient();
   const { error } = await supabase
     .from("cart_items")
@@ -148,71 +191,36 @@ export const removeFromCart = async ({
 
 export const calculateCartTotals = async (
   cartId: string
-): Promise<CartState> => {
+): Promise<CartTotals> => {
   const items = await getCartItems(cartId);
-  const cartItems = [];
   let totalQuantity = 0;
 
-  // Fetch products and build cart items
-  for (const item of items) {
-    const productId = item.product_id;
-    const variantId = item.variant_id;
-    if (!productId || !variantId) continue;
-
-    const product = await getProductById({ id: productId });
-    if (!product) continue;
-
-    const supabase = await createClient();
-    const { data: variant } = await supabase
-      .from("product_variants")
-      .select("*")
-      .eq("id", variantId)
-      .single();
-
-    if (variant) {
-      cartItems.push({
-        merchandise: {
-          ...variant,
-          product,
-        },
-        quantity: item.quantity,
-      });
-      totalQuantity += item.quantity;
-    }
-  }
-
   // Calculate totals
-  const subtotalAmount = cartItems
-    .reduce(
-      (sum, item) =>
-        sum + (item.merchandise.price_adjustment || 0) * item.quantity,
-      0
-    )
-    .toFixed(2);
+  const subtotal = items.reduce((sum, item) => {
+    const price =
+      item.variant?.price_adjustment ?? item.product?.base_price ?? 0;
+    const itemTotal = price * item.quantity;
+    totalQuantity += item.quantity;
+    return sum + itemTotal;
+  }, 0);
 
-  const taxAmount = (
-    parseFloat(subtotalAmount) -
-    parseFloat(subtotalAmount) / VAT_MULTIPLIER
-  ).toFixed(2);
+  const subtotalAmount = subtotal.toFixed(2);
+  const taxAmount = (subtotal - subtotal / VAT_MULTIPLIER).toFixed(2);
   const totalAmount = subtotalAmount;
 
   return {
-    items: cartItems,
-    totalQuantity,
-    status: "idle",
-    cost: {
-      subtotalAmount: {
-        amount: subtotalAmount,
-        currencyCode: "ISK",
-      },
-      totalAmount: {
-        amount: totalAmount,
-        currencyCode: "ISK",
-      },
-      totalTaxAmount: {
-        amount: taxAmount,
-        currencyCode: "ISK",
-      },
+    subtotalAmount: {
+      amount: subtotalAmount,
+      currencyCode: "ISK",
     },
+    totalAmount: {
+      amount: totalAmount,
+      currencyCode: "ISK",
+    },
+    totalTaxAmount: {
+      amount: taxAmount,
+      currencyCode: "ISK",
+    },
+    totalQuantity,
   };
 };

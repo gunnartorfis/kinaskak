@@ -1,15 +1,13 @@
 "use server";
 
-import { CartState } from "@/components/cart/cart-context";
 import { Database } from "@/database.types";
 import { createClient } from "@/db/supabase/server";
 import { getProductById } from "@/lib/store/products";
+import { calculateCartTotals, formatCartTotals } from "@/lib/utils/cart";
 
 type DbProduct = Database["public"]["Tables"]["products"]["Row"];
 type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
-
-const VAT_RATE = 0.24; // 24% VAT rate for physical products in Iceland
-const VAT_MULTIPLIER = 1 + VAT_RATE; // 1.24 for calculating tax-inclusive amounts
+type DbCartItem = Database["public"]["Tables"]["cart_items"]["Row"];
 
 type StorageCartItem = {
   variantId: string;
@@ -17,70 +15,39 @@ type StorageCartItem = {
   quantity: number;
 };
 
-export const calculateCartTotals = async (
-  items: StorageCartItem[]
-): Promise<CartState> => {
-  const cartItems = [];
-  let totalQuantity = 0;
+export const calculateServerCartTotals = async (items: StorageCartItem[]) => {
+  const productsMap: Record<string, DbProduct> = {};
+  const variantsMap: Record<string, DbProductVariant> = {};
+  const cartItems: DbCartItem[] = [];
 
-  // Fetch products and build cart items
-  for (const item of items) {
-    const product = await getProductById({ id: item.productId });
-    if (!product) continue;
+  // Fetch products and variants in parallel
+  await Promise.all(
+    items.map(async (item) => {
+      const [product, { data: variant }] = await Promise.all([
+        getProductById({ id: item.productId }),
+        (await createClient())
+          .from("product_variants")
+          .select("*")
+          .eq("id", item.variantId)
+          .single(),
+      ]);
 
-    const supabase = await createClient();
-    const { data: variant } = await supabase
-      .from("product_variants")
-      .select("*")
-      .eq("id", item.variantId)
-      .single();
+      if (product && variant) {
+        productsMap[item.productId] = product;
+        variantsMap[item.variantId] = variant;
+        cartItems.push({
+          id: crypto.randomUUID(), // Temporary ID for calculation
+          cart_id: null,
+          product_id: item.productId,
+          variant_id: item.variantId,
+          quantity: item.quantity,
+          created_at: null,
+          updated_at: null,
+        });
+      }
+    })
+  );
 
-    if (variant) {
-      cartItems.push({
-        merchandise: {
-          ...variant,
-          product,
-        },
-        quantity: item.quantity,
-      });
-      totalQuantity += item.quantity;
-    }
-  }
-
-  // Calculate totals
-  const subtotalAmount = cartItems
-    .reduce(
-      (sum, item) =>
-        sum + (item.merchandise.price_adjustment || 0) * item.quantity,
-      0
-    )
-    .toFixed(2);
-
-  // Calculate tax from the subtotal (tax is now included in the price)
-  // For a 24% VAT rate, we divide by 1.24 to get the pre-tax amount
-  const taxAmount = (
-    parseFloat(subtotalAmount) -
-    parseFloat(subtotalAmount) / VAT_MULTIPLIER
-  ).toFixed(2);
-  const totalAmount = subtotalAmount;
-
-  return {
-    items: cartItems,
-    totalQuantity,
-    status: "idle",
-    cost: {
-      subtotalAmount: {
-        amount: subtotalAmount,
-        currencyCode: "ISK",
-      },
-      totalAmount: {
-        amount: totalAmount,
-        currencyCode: "ISK",
-      },
-      totalTaxAmount: {
-        amount: taxAmount,
-        currencyCode: "ISK",
-      },
-    },
-  };
+  const totals = calculateCartTotals(cartItems, productsMap, variantsMap);
+  return formatCartTotals(totals);
 };
