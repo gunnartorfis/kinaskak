@@ -3,15 +3,15 @@
 import { Database } from "@/database.types";
 import { createContext, useContext, useReducer } from "react";
 
-type DbProduct = Database["public"]["Tables"]["products"]["Row"];
-type DbCart = Database["public"]["Tables"]["carts"]["Row"];
-type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
 type DbCartItem = Database["public"]["Tables"]["cart_items"]["Row"];
+type DbProduct = Database["public"]["Tables"]["products"]["Row"];
+type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
 
-type CartContextStateItem = Pick<
-  DbCartItem,
-  "product_id" | "quantity" | "variant_id"
->;
+export interface CartContextStateItem {
+  product: DbProduct;
+  variant: DbProductVariant;
+  quantity: number;
+}
 
 interface CartContextState {
   items: CartContextStateItem[];
@@ -46,8 +46,8 @@ const cartReducer = (
     case "ADD_ITEM": {
       const existingItemIndex = state.items.findIndex(
         (item) =>
-          item.product_id === action.payload.product_id &&
-          item.variant_id === action.payload.variant_id
+          item.product.id === action.payload.product.id &&
+          item.variant.id === action.payload.variant.id
       );
 
       const newItems =
@@ -67,8 +67,8 @@ const cartReducer = (
     case "REMOVE_ITEM": {
       const newItems = state.items.filter(
         (item) =>
-          item.product_id !== action.payload.product_id &&
-          item.variant_id !== action.payload.variant_id
+          item.product.id !== action.payload.product.id &&
+          item.variant.id !== action.payload.variant.id
       );
       return {
         ...state,
@@ -77,8 +77,8 @@ const cartReducer = (
     }
     case "UPDATE_ITEM_QUANTITY": {
       const newItems = state.items.map((item) =>
-        item.product_id === action.payload.product_id &&
-        item.variant_id === action.payload.variant_id
+        item.product.id === action.payload.product.id &&
+        item.variant.id === action.payload.variant.id
           ? { ...item, quantity: action.payload.quantity }
           : item
       );
@@ -102,9 +102,17 @@ const cartReducer = (
   }
 };
 
-export const CartProvider = ({ children }: { children: React.ReactNode }) => {
+interface CartProviderProps {
+  children: React.ReactNode;
+  initialItems?: CartContextStateItem[];
+}
+
+export const CartProvider = ({
+  children,
+  initialItems = [],
+}: CartProviderProps) => {
   const [cart, dispatch] = useReducer(cartReducer, {
-    items: [],
+    items: initialItems,
     status: "idle",
   });
 

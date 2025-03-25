@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import { Database } from "@/database.types";
 import { useState } from "react";
 import { AddToCart } from "../cart/add-to-cart";
@@ -22,16 +23,14 @@ export const ProductDescription = ({
     <div className="mb-6 flex flex-col">
       <div className="mb-6">
         <h1 className="mb-2 text-5xl font-medium">{product.name}</h1>
-        <div className="mr-auto w-auto rounded-full bg-blue-600 p-2 text-sm text-white">
-          <p suppressHydrationWarning className="px-2">
-            {(
-              selectedVariant?.price_adjustment || product.base_price
-            ).toLocaleString("is-IS", {
-              style: "currency",
-              currency: "ISK",
-            })}
-          </p>
-        </div>
+        <Badge suppressHydrationWarning>
+          {(
+            selectedVariant?.price_adjustment ?? product.base_price
+          ).toLocaleString("is-IS", {
+            style: "currency",
+            currency: "ISK",
+          })}
+        </Badge>
       </div>
       {variants.length > 1 ? (
         <VariantSelector

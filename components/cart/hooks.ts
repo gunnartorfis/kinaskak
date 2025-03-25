@@ -1,8 +1,4 @@
-import { Database } from "@/database.types";
-import { useCart } from "./cart-context";
-
-type DbProduct = Database["public"]["Tables"]["products"]["Row"];
-type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
+import { CartContextStateItem, useCart } from "./cart-context";
 
 interface CartTotals {
   subtotalAmount: {
@@ -24,29 +20,17 @@ const VAT_RATE = 0.24;
 const VAT_MULTIPLIER = 1 + VAT_RATE;
 
 const calculateClientCartTotals = (
-  items: {
-    product_id: string | null;
-    variant_id: string | null;
-    quantity: number;
-  }[],
-  products: Record<string, DbProduct>,
-  variants: Record<string, DbProductVariant>
+  items: CartContextStateItem[]
 ): CartTotals => {
   let totalQuantity = 0;
-
   // Calculate totals
-  const subtotal = items.reduce((sum, item) => {
-    const productId = item.product_id;
-    const variantId = item.variant_id;
-    if (!productId || !variantId) return sum;
-
-    const product = products[productId];
-    const variant = variants[variantId];
+  const subtotal = items.reduce((sum, { product, variant, quantity }) => {
     if (!product) return sum;
 
     const price = variant?.price_adjustment ?? product.base_price;
-    const itemTotal = price * item.quantity;
-    totalQuantity += item.quantity;
+    const itemTotal = price * quantity;
+    totalQuantity += quantity;
+
     return sum + itemTotal;
   }, 0);
 
@@ -71,10 +55,7 @@ const calculateClientCartTotals = (
   };
 };
 
-export const useCartTotals = (
-  products: Record<string, DbProduct>,
-  variants: Record<string, DbProductVariant>
-) => {
+export const useCartTotals = () => {
   const { cart } = useCart();
-  return calculateClientCartTotals(cart.items, products, variants);
+  return calculateClientCartTotals(cart.items);
 };

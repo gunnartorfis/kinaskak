@@ -1,10 +1,9 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { Database } from "@/database.types";
 import { PlusIcon } from "@heroicons/react/24/outline";
-import clsx from "clsx";
 import { addItem } from "components/cart/actions";
-import { useProduct } from "components/product/product-context";
 import { useActionState } from "react";
 import { useCart } from "./cart-context";
 
@@ -18,45 +17,28 @@ function SubmitButton({
   availableForSale: boolean;
   selectedVariantId: string | undefined;
 }) {
-  const buttonClasses =
-    "relative flex w-full items-center justify-center rounded-full bg-blue-600 p-4 tracking-wide text-white";
-  const disabledClasses = "cursor-not-allowed opacity-60 hover:opacity-60";
-
   if (!availableForSale) {
-    return (
-      <button disabled className={clsx(buttonClasses, disabledClasses)}>
-        Vara uppseld
-      </button>
-    );
+    return <Button disabled>Vara uppseld</Button>;
   }
 
   if (!selectedVariantId) {
     return (
-      <button
-        aria-label="Please select an option"
-        disabled
-        className={clsx(buttonClasses, disabledClasses)}
-      >
+      <Button aria-label="Please select an option" disabled>
         <div className="absolute left-0 ml-4">
           <PlusIcon className="h-5" />
         </div>
         Bæta í körfu
-      </button>
+      </Button>
     );
   }
 
   return (
-    <button
-      aria-label="Bæta í körfu"
-      className={clsx(buttonClasses, {
-        "hover:opacity-90": true,
-      })}
-    >
+    <Button aria-label="Bæta í körfu" className="w-full">
       <div className="absolute left-0 ml-4">
         <PlusIcon className="h-5" />
       </div>
       Bæta í körfu
-    </button>
+    </Button>
   );
 }
 
@@ -69,7 +51,6 @@ export function AddToCart({
 }) {
   const { is_available: availableForSale } = product;
   const { addItem: addCartItem } = useCart();
-  const { state } = useProduct();
   const [message, formAction] = useActionState(
     addItem,
     "Villa að bæta í körfu"
@@ -79,12 +60,12 @@ export function AddToCart({
     <form
       action={async () => {
         if (variant.id) {
-          await addItem(variant.id);
           addCartItem({
-            product_id: product.id,
+            product,
             quantity: 1,
-            variant_id: variant.id,
+            variant,
           });
+          await addItem(variant.id);
         }
       }}
     >
