@@ -2,9 +2,9 @@ import { type ClassValue, clsx } from "clsx";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { twMerge } from "tailwind-merge";
 
-export function cn(...inputs: ClassValue[]) {
+export const cn = (...inputs: ClassValue[]) => {
   return twMerge(clsx(inputs));
-}
+};
 
 export const baseUrl = process.env.NEXT_PUBLIC_URL || "http://localhost:3000";
 

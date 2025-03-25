@@ -1,166 +1,155 @@
 "use client";
 
-import { calculateCartTotals } from "@/app/actions/cart";
-import { Product, ProductVariant } from "lib/store/types";
-import { createContext, useContext, useEffect, useState } from "react";
+import { Database } from "@/database.types";
+import { createContext, useContext, useReducer } from "react";
 
-type CartItem = {
-  merchandise: ProductVariant & {
-    product: Product;
-  };
+type DbCartItem = Database["public"]["Tables"]["cart_items"]["Row"];
+type DbProduct = Database["public"]["Tables"]["products"]["Row"];
+type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
+
+export interface CartContextStateItem {
+  product: DbProduct;
+  variant: DbProductVariant;
   quantity: number;
-};
+}
 
-export type CartState = {
-  lines: CartItem[];
-  totalQuantity: number;
-  cost: {
-    subtotalAmount: {
-      amount: string;
-      currencyCode: string;
-    };
-    totalAmount: {
-      amount: string;
-      currencyCode: string;
-    };
-    totalTaxAmount: {
-      amount: string;
-      currencyCode: string;
-    };
-  };
-};
+interface CartContextState {
+  items: CartContextStateItem[];
+  status: "idle" | "loading" | "error";
+}
 
-type CartContextType = {
-  cart: CartState;
-  addCartItem: (variant: ProductVariant, product: Product) => void;
-  removeCartItem: (variantId: string) => void;
-  updateCartItem: (variantId: string, quantity: number) => void;
-};
+type CartAction =
+  | { type: "ADD_ITEM"; payload: CartContextStateItem }
+  | { type: "REMOVE_ITEM"; payload: CartContextStateItem }
+  | {
+      type: "UPDATE_ITEM_QUANTITY";
+      payload: CartContextStateItem;
+    }
+  | { type: "SET_STATUS"; payload: CartContextState["status"] }
+  | { type: "SET_ITEMS"; payload: CartContextStateItem[] };
 
-const CartContext = createContext<CartContextType | undefined>(undefined);
+const CartContext = createContext<
+  | {
+      cart: CartContextState;
+      addItem: (item: CartContextState["items"][number]) => void;
+      removeItem: (item: CartContextState["items"][number]) => void;
+      updateItemQuantity: (item: CartContextState["items"][number]) => void;
+    }
+  | undefined
+>(undefined);
 
-const CART_STORAGE_KEY = "cartItems";
+const cartReducer = (
+  state: CartContextState,
+  action: CartAction
+): CartContextState => {
+  switch (action.type) {
+    case "ADD_ITEM": {
+      const existingItemIndex = state.items.findIndex(
+        (item) =>
+          item.product.id === action.payload.product.id &&
+          item.variant.id === action.payload.variant.id
+      );
 
-// Only store minimal cart data in sessionStorage
-type StorageCartItem = {
-  variantId: string;
-  productId: string;
-  quantity: number;
-};
+      const newItems =
+        existingItemIndex >= 0
+          ? state.items.map((item, index) =>
+              index === existingItemIndex
+                ? { ...item, quantity: item.quantity + action.payload.quantity }
+                : item
+            )
+          : [...state.items, action.payload];
 
-const defaultCartState: CartState = {
-  lines: [],
-  totalQuantity: 0,
-  cost: {
-    subtotalAmount: {
-      amount: "0",
-      currencyCode: "ISK",
-    },
-    totalAmount: {
-      amount: "0",
-      currencyCode: "ISK",
-    },
-    totalTaxAmount: {
-      amount: "0",
-      currencyCode: "ISK",
-    },
-  },
-};
-
-export function CartProvider({ children }: { children: React.ReactNode }) {
-  const [cart, setCart] = useState<CartState>(defaultCartState);
-
-  // Load cart from sessionStorage and calculate totals
-  useEffect(() => {
-    const loadCart = async () => {
-      const savedCart = sessionStorage.getItem(CART_STORAGE_KEY);
-      if (savedCart) {
-        const storageItems: StorageCartItem[] = JSON.parse(savedCart);
-        const calculatedCart = await calculateCartTotals(storageItems);
-        setCart(calculatedCart);
-      }
-    };
-
-    loadCart();
-  }, []);
-
-  const addCartItem = async (variant: ProductVariant, product: Product) => {
-    const savedCart = sessionStorage.getItem(CART_STORAGE_KEY);
-    const storageItems: StorageCartItem[] = savedCart
-      ? JSON.parse(savedCart)
-      : [];
-
-    const existingItem = storageItems.find(
-      (item) => item.variantId === variant.id
-    );
-
-    let newStorageItems: StorageCartItem[];
-    if (existingItem) {
-      newStorageItems = storageItems.map((item) =>
-        item.variantId === variant.id
-          ? { ...item, quantity: item.quantity + 1 }
+      return {
+        ...state,
+        items: newItems,
+      };
+    }
+    case "REMOVE_ITEM": {
+      const newItems = state.items.filter(
+        (item) =>
+          item.product.id !== action.payload.product.id &&
+          item.variant.id !== action.payload.variant.id
+      );
+      return {
+        ...state,
+        items: newItems,
+      };
+    }
+    case "UPDATE_ITEM_QUANTITY": {
+      const newItems = state.items.map((item) =>
+        item.product.id === action.payload.product.id &&
+        item.variant.id === action.payload.variant.id
+          ? { ...item, quantity: action.payload.quantity }
           : item
       );
-    } else {
-      newStorageItems = [
-        ...storageItems,
-        {
-          variantId: variant.id,
-          productId: product.id,
-          quantity: 1,
-        },
-      ];
+      return {
+        ...state,
+        items: newItems,
+      };
     }
+    case "SET_STATUS":
+      return {
+        ...state,
+        status: action.payload,
+      };
+    case "SET_ITEMS":
+      return {
+        ...state,
+        items: action.payload,
+      };
+    default:
+      return state;
+  }
+};
 
-    sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newStorageItems));
-    const calculatedCart = await calculateCartTotals(newStorageItems);
-    setCart(calculatedCart);
+interface CartProviderProps {
+  children: React.ReactNode;
+  initialItems?: CartContextStateItem[];
+}
+
+export const CartProvider = ({
+  children,
+  initialItems = [],
+}: CartProviderProps) => {
+  const [cart, dispatch] = useReducer(cartReducer, {
+    items: initialItems,
+    status: "idle",
+  });
+
+  const addItem = (item: CartContextState["items"][number]) => {
+    dispatch({ type: "ADD_ITEM", payload: item });
   };
 
-  const removeCartItem = async (variantId: string) => {
-    const savedCart = sessionStorage.getItem(CART_STORAGE_KEY);
-    if (!savedCart) return;
-
-    const storageItems: StorageCartItem[] = JSON.parse(savedCart);
-    const newStorageItems = storageItems.filter(
-      (item) => item.variantId !== variantId
-    );
-
-    sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newStorageItems));
-    const calculatedCart = await calculateCartTotals(newStorageItems);
-    setCart(calculatedCart);
+  const removeItem = (item: CartContextState["items"][number]) => {
+    dispatch({ type: "REMOVE_ITEM", payload: item });
   };
 
-  const updateCartItem = async (variantId: string, quantity: number) => {
-    const savedCart = sessionStorage.getItem(CART_STORAGE_KEY);
-    if (!savedCart) return;
-
-    const storageItems: StorageCartItem[] = JSON.parse(savedCart);
-    const newStorageItems =
-      quantity > 0
-        ? storageItems.map((item) =>
-            item.variantId === variantId ? { ...item, quantity } : item
-          )
-        : storageItems.filter((item) => item.variantId !== variantId);
-
-    sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newStorageItems));
-    const calculatedCart = await calculateCartTotals(newStorageItems);
-    setCart(calculatedCart);
+  const updateItemQuantity = (item: CartContextState["items"][number]) => {
+    dispatch({
+      type: "UPDATE_ITEM_QUANTITY",
+      payload: item,
+    });
   };
 
   return (
     <CartContext.Provider
-      value={{ cart, addCartItem, removeCartItem, updateCartItem }}
+      value={{ cart, addItem, removeItem, updateItemQuantity }}
     >
       {children}
     </CartContext.Provider>
   );
-}
+};
 
-export function useCart() {
+export const useCart = () => {
   const context = useContext(CartContext);
   if (context === undefined) {
     throw new Error("useCart must be used within a CartProvider");
   }
   return context;
-}
+};
+
+// Helper hooks for derived state
+export const useCartQuantity = () => {
+  const { cart } = useCart();
+  return cart.items.reduce((total, item) => total + item.quantity, 0);
+};

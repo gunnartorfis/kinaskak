@@ -1,15 +1,23 @@
 "use server";
 
+import { Database } from "@/database.types";
+import { createClient } from "@/db/supabase/server";
 import {
-  sendCompanyNotificationEmail,
-  sendOrderConfirmationEmail,
-} from "@/lib/email";
+  addToCart as addToCartDb,
+  calculateCartTotals,
+  getOrCreateCart,
+  removeFromCart as removeFromCartDb,
+  updateCartItemQuantity as updateCartItemQuantityDb,
+} from "@/lib/dal/cart";
 import { createCheckout } from "@/lib/rapyd/checkout";
-import { getProductById, getProductsByIds } from "@/lib/store/products";
+import { getProductsByIds } from "@/lib/store/products";
 import { TAGS } from "lib/constants";
 import { revalidateTag } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+
+type DbProduct = Database["public"]["Tables"]["products"]["Row"];
+type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
 
 export interface CartItem {
   id: string;
@@ -22,63 +30,81 @@ export interface CheckoutItem {
   quantity: number;
 }
 
-const CART_COOKIE = "cart";
+const CART_ID_COOKIE = "cartId";
 
-const getCartFromCookie = async (): Promise<CartItem[]> => {
+const getCartId = async () => {
   const cookieStore = await cookies();
-  const cartCookie = cookieStore.get(CART_COOKIE)?.value;
-  return cartCookie ? JSON.parse(cartCookie) : [];
-};
+  const cartId = cookieStore.get(CART_ID_COOKIE)?.value;
 
-const setCartCookie = async (cart: CartItem[]) => {
-  const cookieStore = await cookies();
-  cookieStore.set(CART_COOKIE, JSON.stringify(cart));
-};
-
-export const addToCart = async (productId: string) => {
-  const cart = await getCartFromCookie();
-  const product = await getProductById({ id: productId });
-
-  const existingItem = cart.find((item) => item.id === productId);
-  if (existingItem) {
-    existingItem.quantity += 1;
-  } else {
-    cart.push({
-      id: productId,
-      quantity: 1,
-      amount: parseFloat(product?.variants[0]?.price.amount ?? "0"),
-    });
+  if (!cartId) {
+    const cart = await getOrCreateCart();
+    cookieStore.set(CART_ID_COOKIE, cart.id);
+    return cart.id;
   }
 
-  await setCartCookie(cart);
-  return cart;
+  return cartId;
 };
 
-export const removeFromCart = async (productId: string) => {
-  const cart = await getCartFromCookie();
-  const updatedCart = cart.filter((item) => item.id !== productId);
-  await setCartCookie(updatedCart);
-  return updatedCart;
+const getProductVariant = async (
+  variantId: string
+): Promise<DbProductVariant | null> => {
+  const supabase = await createClient();
+  const { data: variant } = await supabase
+    .from("product_variants")
+    .select("*")
+    .eq("id", variantId)
+    .limit(1)
+    .single();
+
+  return variant;
+};
+
+export const addToCart = async (variantId: string) => {
+  const cartId = await getCartId();
+  const variant = await getProductVariant(variantId);
+  if (!variant) return;
+  await addToCartDb({
+    cartId,
+    productId: variant.product_id,
+    variantId: variant.id,
+  });
+
+  return calculateCartTotals(cartId);
+};
+
+export const removeFromCart = async (variantId: string) => {
+  const cartId = await getCartId();
+  const variant = await getProductVariant(variantId);
+  if (!variant) return;
+
+  await removeFromCartDb({
+    cartId,
+    variantId: variant.id,
+  });
+
+  return calculateCartTotals(cartId);
 };
 
 export const updateCartItemQuantity = async (
-  productId: string,
+  variantId: string,
   quantity: number
 ) => {
-  const cart = await getCartFromCookie();
+  const cartId = await getCartId();
+  const variant = await getProductVariant(variantId);
+  if (!variant) return;
 
-  const item = cart.find((item) => item.id === productId);
-  if (item) {
-    item.quantity = quantity;
-  }
+  await updateCartItemQuantityDb({
+    cartId,
+    variantId: variant.id,
+    quantity,
+  });
 
-  const updatedCart = cart.filter((item) => item.quantity > 0);
-  await setCartCookie(updatedCart);
-  return updatedCart;
+  return calculateCartTotals(cartId);
 };
 
-export const getCart = async (): Promise<CartItem[]> => {
-  return getCartFromCookie();
+export const getCart = async () => {
+  const cartId = await getCartId();
+  return calculateCartTotals(cartId);
 };
 
 export async function addItem(selectedVariantId: string | undefined) {
@@ -94,85 +120,62 @@ export async function addItem(selectedVariantId: string | undefined) {
   }
 }
 
-export async function removeItem(merchandiseId: string | undefined) {
-  if (!merchandiseId) {
-    return "Missing product ID";
+export async function removeItem(selectedVariantId: string | undefined) {
+  if (!selectedVariantId) {
+    return "Missing product variant ID";
   }
 
   try {
-    const cart = await getCart();
-
-    const lineItem = cart.find((line) => line.id === merchandiseId);
-
-    if (lineItem) {
-      await removeFromCart(merchandiseId);
-      revalidateTag(TAGS.cart);
-    } else {
-      return "Item not found in cart";
-    }
+    await removeFromCart(selectedVariantId);
+    revalidateTag(TAGS.cart);
   } catch (e) {
     return "Error removing item from cart";
   }
 }
 
 export async function updateItemQuantity(
-  merchandiseId: string | undefined,
+  variantId: string | undefined,
   quantity: number
 ) {
-  if (!merchandiseId) {
-    return "Missing product ID";
+  if (!variantId) {
+    return "Missing product variant ID";
   }
 
   try {
-    const cart = await getCart();
-
-    const lineItem = cart.find((line) => line.id === merchandiseId);
-
-    if (lineItem) {
-      if (quantity === 0) {
-        await removeFromCart(merchandiseId);
-      } else {
-        await updateCartItemQuantity(merchandiseId, quantity);
-      }
-    } else if (quantity > 0) {
-      await addToCart(merchandiseId);
-    }
-
+    await updateCartItemQuantity(variantId, quantity);
     revalidateTag(TAGS.cart);
   } catch (e) {
     return "Error updating item quantity";
   }
 }
 
-export async function createCart() {
-  const cart = {
-    id: crypto.randomUUID(),
-  };
-
-  return cart;
-}
-
-export async function createCartAndSetCookie() {
-  let cart = await createCart();
-  (await cookies()).set("cartId", cart.id!);
-}
-
 export async function redirectToCheckout({ items }: { items: CheckoutItem[] }) {
   const products = await getProductsByIds({
     ids: items.map((item) => item.id),
   });
-  const cartItems = items.map(({ id, quantity }) => {
-    const item = products.find((product) => product.id === id);
-    const amount = item?.variants[0]?.price.amount ?? "0";
-    return {
-      id,
-      quantity,
-      amount: parseFloat(amount),
-      name: item?.title ?? "Unknown Product",
-    };
-  });
 
-  const totalAmount = cartItems.reduce(
+  const cartItems = await Promise.all(
+    items.map(async ({ id, quantity }) => {
+      const product = products.find((p) => p.id === id);
+      if (!product) return null;
+
+      const variant = await getProductVariant(product.id);
+      const amount = variant?.price_adjustment ?? product.base_price;
+
+      return {
+        id,
+        quantity,
+        amount,
+        name: product.name,
+      };
+    })
+  );
+
+  const validCartItems = cartItems.filter(
+    (item): item is NonNullable<typeof item> => item !== null
+  );
+
+  const totalAmount = validCartItems.reduce(
     (acc, item) => acc + item.quantity * item.amount,
     0
   );
@@ -187,25 +190,17 @@ export async function redirectToCheckout({ items }: { items: CheckoutItem[] }) {
   });
 
   const orderDetails = {
-    items: cartItems,
+    items: validCartItems,
     totalAmount,
     merchantReferenceId,
   };
 
-  try {
-    // Send both emails in parallel
-    await Promise.all([
-      sendOrderConfirmationEmail(orderDetails),
-      sendCompanyNotificationEmail(orderDetails),
-    ]);
-  } catch (error) {
-    console.error("Failed to send order emails:", error);
-    // Continue with checkout even if emails fail
-  }
+  // TODO: we need to store something in the database here!
 
-  // clear cart cookie
+  // Clear cart after successful checkout
+  const cartId = await getCartId();
   const cookieStore = await cookies();
-  cookieStore.delete("cart");
+  cookieStore.delete(CART_ID_COOKIE);
 
   redirect(checkout.redirect_url);
 }
@@ -217,7 +212,6 @@ const getBaseCheckoutRedirectUrl = () => {
     throw new Error("NEXT_PUBLIC_VERCEL_URL is not set");
   }
 
-  // if the url doesn't start with https://, add it
   if (!url.startsWith("https://")) {
     return "https://" + url;
   }

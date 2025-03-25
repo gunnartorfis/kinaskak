@@ -1,100 +1,10 @@
 import { Database } from "@/database.types";
 import { createClient } from "@/db/supabase/server";
-import { Collection, Product, ProductVariant } from "./types";
+import { Collection } from "./types";
 
-type DbProduct = Database["public"]["Tables"]["products"]["Row"];
-type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
-
-const transformVariant = (
-  variant: DbProductVariant,
-  productName: string
-): ProductVariant => ({
-  id: variant.id,
-  title: variant.name || productName,
-  availableForSale: variant.is_available ?? true,
-  selectedOptions: [{ name: "Default", value: "Default" }],
-  price: {
-    amount: variant.price_adjustment?.toString() || "0",
-    currencyCode: "ISK",
-  },
-});
-
-const transformProductToVariant = (product: DbProduct): ProductVariant => {
-  return {
-    id: product.id,
-    title: product.name,
-    availableForSale: product.is_available ?? true,
-    price: {
-      amount: product.base_price.toString(),
-      currencyCode: "ISK",
-    },
-    selectedOptions: [{ name: "Default", value: "Default" }],
-  };
-};
-
-const transformProduct = (
-  product: DbProduct,
-  variants: DbProductVariant[]
-): Product => {
-  const productVariants = variants.length
-    ? variants.map((v) => transformVariant(v, product.name))
-    : [transformProductToVariant(product)];
-
-  const prices = productVariants.map((v) => parseFloat(v.price.amount));
-  const minPrice = Math.min(...prices, product.base_price);
-  const maxPrice = Math.max(...prices, product.base_price);
-
-  return {
-    id: product.id,
-    handle: product.handle || product.id,
-    availableForSale: product.is_available ?? true,
-    title: product.name,
-    description: product.description || "",
-    descriptionHtml: product.description ? `<p>${product.description}</p>` : "",
-    options: [
-      {
-        id: "default",
-        name: "Default",
-        values: ["Default"],
-      },
-    ],
-    priceRange: {
-      maxVariantPrice: {
-        amount: maxPrice.toString(),
-        currencyCode: "ISK",
-      },
-      minVariantPrice: {
-        amount: minPrice.toString(),
-        currencyCode: "ISK",
-      },
-    },
-    variants: productVariants,
-    featuredImage: {
-      source: {
-        type: "remote",
-        url: product.image_url,
-      },
-      altText: product.name,
-    },
-    images: product.image_url
-      ? [
-          {
-            source: {
-              type: "remote",
-              url: product.image_url,
-            },
-            altText: product.name,
-          },
-        ]
-      : [],
-    seo: {
-      title: product.name,
-      description: product.description || "",
-    },
-    tags: [],
-    updatedAt: product.updated_at || new Date().toISOString(),
-  };
-};
+export type DbProduct = Database["public"]["Tables"]["products"]["Row"];
+export type DbProductVariant =
+  Database["public"]["Tables"]["product_variants"]["Row"];
 
 const collections: Collection[] = [
   {
@@ -113,7 +23,7 @@ export const getProduct = async ({
   handle,
 }: {
   handle: string;
-}): Promise<Product | undefined> => {
+}): Promise<DbProduct | undefined> => {
   const supabase = await createClient();
 
   const { data: product } = await supabase
@@ -122,23 +32,14 @@ export const getProduct = async ({
     .eq("handle", handle)
     .single();
 
-  if (!product) {
-    return undefined;
-  }
-
-  const { data: variants } = await supabase
-    .from("product_variants")
-    .select("*")
-    .eq("product_id", product.id);
-
-  return transformProduct(product, variants || []);
+  return product || undefined;
 };
 
 export const getProductById = async ({
   id,
 }: {
   id: string;
-}): Promise<Product | undefined> => {
+}): Promise<DbProduct | undefined> => {
   const supabase = await createClient();
 
   const { data: product } = await supabase
@@ -147,23 +48,14 @@ export const getProductById = async ({
     .eq("id", id)
     .single();
 
-  if (!product) {
-    return undefined;
-  }
-
-  const { data: variants } = await supabase
-    .from("product_variants")
-    .select("*")
-    .eq("product_id", product.id);
-
-  return transformProduct(product, variants || []);
+  return product || undefined;
 };
 
 export const getProductsByIds = async ({
   ids,
 }: {
   ids: string[];
-}): Promise<Product[]> => {
+}): Promise<DbProduct[]> => {
   const supabase = await createClient();
 
   const { data: products } = await supabase
@@ -171,24 +63,7 @@ export const getProductsByIds = async ({
     .select("*")
     .in("id", ids);
 
-  if (!products?.length) {
-    return [];
-  }
-
-  const { data: variants } = await supabase
-    .from("product_variants")
-    .select("*")
-    .in(
-      "product_id",
-      products.map((p) => p.id)
-    );
-
-  return products.map((product) =>
-    transformProduct(
-      product,
-      (variants || []).filter((v) => v.product_id === product.id)
-    )
-  );
+  return products || [];
 };
 
 export const getProducts = async ({
@@ -199,7 +74,7 @@ export const getProducts = async ({
   query?: string;
   reverse?: boolean;
   sortKey?: string;
-} = {}): Promise<Product[]> => {
+} = {}): Promise<DbProduct[]> => {
   const supabase = await createClient();
   let productsQuery = supabase.from("products").select("*");
 
@@ -222,31 +97,14 @@ export const getProducts = async ({
 
   const { data: products } = await productsQuery;
 
-  if (!products?.length) {
-    return [];
-  }
-
-  const { data: variants } = await supabase
-    .from("product_variants")
-    .select("*")
-    .in(
-      "product_id",
-      products.map((p) => p.id)
-    );
-
-  return products.map((product) =>
-    transformProduct(
-      product,
-      (variants || []).filter((v) => v.product_id === product.id)
-    )
-  );
+  return products || [];
 };
 
 export const getProductRecommendations = async ({
   productId,
 }: {
   productId: string;
-}): Promise<Product[]> => {
+}): Promise<DbProduct[]> => {
   const supabase = await createClient();
 
   const { data: products } = await supabase
@@ -255,24 +113,7 @@ export const getProductRecommendations = async ({
     .neq("id", productId)
     .limit(4);
 
-  if (!products?.length) {
-    return [];
-  }
-
-  const { data: variants } = await supabase
-    .from("product_variants")
-    .select("*")
-    .in(
-      "product_id",
-      products.map((p) => p.id)
-    );
-
-  return products.map((product) =>
-    transformProduct(
-      product,
-      (variants || []).filter((v) => v.product_id === product.id)
-    )
-  );
+  return products || [];
 };
 
 export const getCollectionProducts = async ({
@@ -283,7 +124,7 @@ export const getCollectionProducts = async ({
   collection: string;
   sortKey?: string;
   reverse?: boolean;
-}): Promise<Product[]> => {
+}): Promise<DbProduct[]> => {
   const supabase = await createClient();
 
   const { data: category } = await supabase
@@ -305,45 +146,32 @@ export const getCollectionProducts = async ({
     return [];
   }
 
-  const { data: variants } = await supabase
-    .from("product_variants")
-    .select("*")
-    .in(
-      "product_id",
-      products.map((p) => p.id)
-    );
-
-  let transformedProducts = products.map((product) =>
-    transformProduct(
-      product,
-      (variants || []).filter((v) => v.product_id === product.id)
-    )
-  );
+  let sortedProducts = [...products];
 
   if (sortKey) {
-    transformedProducts.sort((a, b) => {
+    sortedProducts.sort((a, b) => {
       switch (sortKey) {
         case "TITLE":
           return reverse
-            ? b.title.localeCompare(a.title)
-            : a.title.localeCompare(b.title);
+            ? b.name.localeCompare(a.name)
+            : a.name.localeCompare(b.name);
         case "PRICE":
           return reverse
-            ? parseFloat(b.priceRange.minVariantPrice.amount) -
-                parseFloat(a.priceRange.minVariantPrice.amount)
-            : parseFloat(a.priceRange.minVariantPrice.amount) -
-                parseFloat(b.priceRange.minVariantPrice.amount);
+            ? b.base_price - a.base_price
+            : a.base_price - b.base_price;
         case "CREATED_AT":
           return reverse
-            ? new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-            : new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+            ? new Date(b.created_at || "").getTime() -
+                new Date(a.created_at || "").getTime()
+            : new Date(a.created_at || "").getTime() -
+                new Date(b.created_at || "").getTime();
         default:
           return 0;
       }
     });
   }
 
-  return transformedProducts;
+  return sortedProducts;
 };
 
 export const getCollections = (): Promise<Collection[]> => {
