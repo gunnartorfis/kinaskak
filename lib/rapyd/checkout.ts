@@ -53,6 +53,12 @@ export const createCheckout = cache(
       country: DEFAULT_CHECKOUT_CONFIG.country,
       currency: DEFAULT_CHECKOUT_CONFIG.currency,
       payment_method_types_include: ICELANDIC_PAYMENT_METHODS,
+      custom_elements: {
+        billing_address_collect: true,
+      },
+      metadata: {
+        // TODO: email, name, phone, address
+      },
       ...(description && { description }),
     };
 

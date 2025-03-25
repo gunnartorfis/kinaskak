@@ -217,7 +217,7 @@ export default function CartModal() {
                   </ul>
                   <div className="py-4 text-sm text-neutral-500 dark:text-neutral-400">
                     <div className="mb-3 flex items-center justify-between border-b border-neutral-200 pb-1 dark:border-neutral-700">
-                      <p>Vsk</p>
+                      <p>Þar af vsk</p>
                       <Price
                         className="text-right text-base text-black dark:text-white"
                         amount={cart.cost.totalTaxAmount.amount}

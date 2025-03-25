@@ -1,13 +1,56 @@
-import { Collection, Product } from "./types";
+import { Database } from "@/database.types";
+import { createClient } from "@/db/supabase/server";
+import { Collection, Product, ProductVariant } from "./types";
 
-const products: Product[] = [
-  {
-    id: "1",
-    handle: "kinaskak-blokk",
-    availableForSale: true,
-    title: "Kínaskák stigatafla",
-    description: "50 blaða Kínaskák stigatafla sem rifblokk",
-    descriptionHtml: "<p>50 blaða Kínaskák stigatafla sem rifblokk</p>",
+type DbProduct = Database["public"]["Tables"]["products"]["Row"];
+type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
+
+const transformVariant = (
+  variant: DbProductVariant,
+  productName: string
+): ProductVariant => ({
+  id: variant.id,
+  title: variant.name || productName,
+  availableForSale: variant.is_available ?? true,
+  selectedOptions: [{ name: "Default", value: "Default" }],
+  price: {
+    amount: variant.price_adjustment?.toString() || "0",
+    currencyCode: "ISK",
+  },
+});
+
+const transformProductToVariant = (product: DbProduct): ProductVariant => {
+  return {
+    id: product.id,
+    title: product.name,
+    availableForSale: product.is_available ?? true,
+    price: {
+      amount: product.base_price.toString(),
+      currencyCode: "ISK",
+    },
+    selectedOptions: [{ name: "Default", value: "Default" }],
+  };
+};
+
+const transformProduct = (
+  product: DbProduct,
+  variants: DbProductVariant[]
+): Product => {
+  const productVariants = variants.length
+    ? variants.map((v) => transformVariant(v, product.name))
+    : [transformProductToVariant(product)];
+
+  const prices = productVariants.map((v) => parseFloat(v.price.amount));
+  const minPrice = Math.min(...prices, product.base_price);
+  const maxPrice = Math.max(...prices, product.base_price);
+
+  return {
+    id: product.id,
+    handle: product.handle || product.id,
+    availableForSale: product.is_available ?? true,
+    title: product.name,
+    description: product.description || "",
+    descriptionHtml: product.description ? `<p>${product.description}</p>` : "",
     options: [
       {
         id: "default",
@@ -17,57 +60,41 @@ const products: Product[] = [
     ],
     priceRange: {
       maxVariantPrice: {
-        amount: "2499",
+        amount: maxPrice.toString(),
         currencyCode: "ISK",
       },
       minVariantPrice: {
-        amount: "2499",
+        amount: minPrice.toString(),
         currencyCode: "ISK",
       },
     },
-    variants: [
-      {
-        id: "default",
-        title: "Kínaskák stigatafla",
-        availableForSale: true,
-        selectedOptions: [{ name: "Default", value: "Default" }],
-        price: {
-          amount: "2499",
-          currencyCode: "ISK",
-        },
-      },
-    ],
+    variants: productVariants,
     featuredImage: {
       source: {
-        type: "static",
-        path: "/images/products/kinaskak.png",
+        type: "remote",
+        url: product.image_url,
       },
-      altText: "Kínaskák stigatafla",
+      altText: product.name,
     },
-    images: [
-      {
-        source: {
-          type: "static",
-          path: "/images/products/kinaskak.png",
-        },
-        altText: "Kínaskák stigatafla",
-      },
-      {
-        source: {
-          type: "static",
-          path: "/images/products/kinaskak-back.jpg",
-        },
-        altText: "Kínaskák stigatafla - Bakhlið",
-      },
-    ],
+    images: product.image_url
+      ? [
+          {
+            source: {
+              type: "remote",
+              url: product.image_url,
+            },
+            altText: product.name,
+          },
+        ]
+      : [],
     seo: {
-      title: "Kínaskák stigatafla",
-      description: "50 blaða Kínaskák stigatafla sem rifblokk",
+      title: product.name,
+      description: product.description || "",
     },
-    tags: ["jacket", "leather", "classic"],
-    updatedAt: new Date().toISOString(),
-  },
-];
+    tags: [],
+    updatedAt: product.updated_at || new Date().toISOString(),
+  };
+};
 
 const collections: Collection[] = [
   {
@@ -82,31 +109,89 @@ const collections: Collection[] = [
   },
 ];
 
-export const getProduct = ({
+export const getProduct = async ({
   handle,
 }: {
   handle: string;
 }): Promise<Product | undefined> => {
-  return Promise.resolve(products.find((p) => p.handle === handle));
+  const supabase = await createClient();
+
+  const { data: product } = await supabase
+    .from("products")
+    .select("*")
+    .eq("handle", handle)
+    .single();
+
+  if (!product) {
+    return undefined;
+  }
+
+  const { data: variants } = await supabase
+    .from("product_variants")
+    .select("*")
+    .eq("product_id", product.id);
+
+  return transformProduct(product, variants || []);
 };
 
-export const getProductById = ({
+export const getProductById = async ({
   id,
 }: {
   id: string;
 }): Promise<Product | undefined> => {
-  return Promise.resolve(products.find((p) => p.id === id));
+  const supabase = await createClient();
+
+  const { data: product } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (!product) {
+    return undefined;
+  }
+
+  const { data: variants } = await supabase
+    .from("product_variants")
+    .select("*")
+    .eq("product_id", product.id);
+
+  return transformProduct(product, variants || []);
 };
 
-export const getProductsByIds = ({
+export const getProductsByIds = async ({
   ids,
 }: {
   ids: string[];
 }): Promise<Product[]> => {
-  return Promise.resolve(products.filter((p) => ids.includes(p.id)));
+  const supabase = await createClient();
+
+  const { data: products } = await supabase
+    .from("products")
+    .select("*")
+    .in("id", ids);
+
+  if (!products?.length) {
+    return [];
+  }
+
+  const { data: variants } = await supabase
+    .from("product_variants")
+    .select("*")
+    .in(
+      "product_id",
+      products.map((p) => p.id)
+    );
+
+  return products.map((product) =>
+    transformProduct(
+      product,
+      (variants || []).filter((v) => v.product_id === product.id)
+    )
+  );
 };
 
-export const getProducts = ({
+export const getProducts = async ({
   query,
   reverse,
   sortKey,
@@ -115,19 +200,128 @@ export const getProducts = ({
   reverse?: boolean;
   sortKey?: string;
 } = {}): Promise<Product[]> => {
-  let filteredProducts = [...products];
+  const supabase = await createClient();
+  let productsQuery = supabase.from("products").select("*");
 
   if (query) {
-    const searchQuery = query.toLowerCase();
-    filteredProducts = filteredProducts.filter(
-      (product) =>
-        product.title.toLowerCase().includes(searchQuery) ||
-        product.description.toLowerCase().includes(searchQuery)
+    productsQuery = productsQuery.or(
+      `name.ilike.%${query}%,description.ilike.%${query}%`
     );
   }
 
   if (sortKey) {
-    filteredProducts.sort((a, b) => {
+    const column =
+      sortKey === "TITLE"
+        ? "name"
+        : sortKey === "CREATED_AT"
+          ? "created_at"
+          : "base_price";
+
+    productsQuery = productsQuery.order(column, { ascending: !reverse });
+  }
+
+  const { data: products } = await productsQuery;
+
+  if (!products?.length) {
+    return [];
+  }
+
+  const { data: variants } = await supabase
+    .from("product_variants")
+    .select("*")
+    .in(
+      "product_id",
+      products.map((p) => p.id)
+    );
+
+  return products.map((product) =>
+    transformProduct(
+      product,
+      (variants || []).filter((v) => v.product_id === product.id)
+    )
+  );
+};
+
+export const getProductRecommendations = async ({
+  productId,
+}: {
+  productId: string;
+}): Promise<Product[]> => {
+  const supabase = await createClient();
+
+  const { data: products } = await supabase
+    .from("products")
+    .select("*")
+    .neq("id", productId)
+    .limit(4);
+
+  if (!products?.length) {
+    return [];
+  }
+
+  const { data: variants } = await supabase
+    .from("product_variants")
+    .select("*")
+    .in(
+      "product_id",
+      products.map((p) => p.id)
+    );
+
+  return products.map((product) =>
+    transformProduct(
+      product,
+      (variants || []).filter((v) => v.product_id === product.id)
+    )
+  );
+};
+
+export const getCollectionProducts = async ({
+  collection,
+  sortKey,
+  reverse,
+}: {
+  collection: string;
+  sortKey?: string;
+  reverse?: boolean;
+}): Promise<Product[]> => {
+  const supabase = await createClient();
+
+  const { data: category } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("name", collection)
+    .single();
+
+  if (!category) {
+    return [];
+  }
+
+  const { data: products } = await supabase
+    .from("products")
+    .select("*")
+    .eq("category_id", category.id);
+
+  if (!products?.length) {
+    return [];
+  }
+
+  const { data: variants } = await supabase
+    .from("product_variants")
+    .select("*")
+    .in(
+      "product_id",
+      products.map((p) => p.id)
+    );
+
+  let transformedProducts = products.map((product) =>
+    transformProduct(
+      product,
+      (variants || []).filter((v) => v.product_id === product.id)
+    )
+  );
+
+  if (sortKey) {
+    transformedProducts.sort((a, b) => {
       switch (sortKey) {
         case "TITLE":
           return reverse
@@ -149,29 +343,7 @@ export const getProducts = ({
     });
   }
 
-  return Promise.resolve(filteredProducts);
-};
-
-export const getProductRecommendations = ({
-  productId,
-}: {
-  productId: string;
-}): Promise<Product[]> => {
-  // For now, just return other products excluding the current one
-  return Promise.resolve(products.filter((p) => p.id !== productId));
-};
-
-export const getCollectionProducts = ({
-  collection,
-  sortKey,
-  reverse,
-}: {
-  collection: string;
-  sortKey?: string;
-  reverse?: boolean;
-}): Promise<Product[]> => {
-  // For now, return all products since we don't have collection associations
-  return getProducts({ sortKey, reverse });
+  return transformedProducts;
 };
 
 export const getCollections = (): Promise<Collection[]> => {

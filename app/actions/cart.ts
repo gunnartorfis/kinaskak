@@ -3,6 +3,9 @@
 import { CartState } from "@/components/cart/cart-context";
 import { getProductById } from "@/lib/store/products";
 
+const VAT_RATE = 0.24; // 24% VAT rate for physical products in Iceland
+const VAT_MULTIPLIER = 1 + VAT_RATE; // 1.24 for calculating tax-inclusive amounts
+
 type StorageCartItem = {
   variantId: string;
   productId: string;
@@ -42,10 +45,13 @@ export const calculateCartTotals = async (
     )
     .toFixed(2);
 
-  const taxAmount = (parseFloat(subtotalAmount) * 0.1).toFixed(2);
-  const totalAmount = (
-    parseFloat(subtotalAmount) + parseFloat(taxAmount)
+  // Calculate tax from the subtotal (tax is now included in the price)
+  // For a 24% VAT rate, we divide by 1.24 to get the pre-tax amount
+  const taxAmount = (
+    parseFloat(subtotalAmount) -
+    parseFloat(subtotalAmount) / VAT_MULTIPLIER
   ).toFixed(2);
+  const totalAmount = subtotalAmount;
 
   return {
     lines: cartLines,
