@@ -1,38 +1,41 @@
 "use client";
 
-import { MinusIcon, PlusIcon } from "@heroicons/react/24/outline";
-import clsx from "clsx";
-import { CartItem } from "lib/store/types";
+import { Button } from "@/components/ui/button";
+import { Database } from "@/database.types";
+import { useCart } from "./cart-context";
 
-export function EditItemQuantityButton({
-  item,
-  type,
-  onClick,
+type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
+
+export const EditItemQuantityButton = ({
+  variant,
+  quantity,
 }: {
-  item: CartItem;
-  type: "plus" | "minus";
-  onClick: () => void;
-}) {
+  variant: DbProductVariant;
+  quantity: number;
+}) => {
+  const { updateItemQuantity } = useCart();
+
   return (
-    <button
-      aria-label={
-        type === "plus" ? "Increase item quantity" : "Reduce item quantity"
-      }
-      onClick={onClick}
-      className={clsx(
-        "flex h-full min-w-[36px] max-w-[36px] items-center justify-center px-2",
-        {
-          "cursor-not-allowed": type === "minus" && item.quantity === 1,
-          "cursor-pointer": type === "plus" || item.quantity > 1,
+    <div className="flex gap-2">
+      <Button
+        aria-label="Reduce item quantity"
+        onClick={() =>
+          updateItemQuantity(variant.id, Math.max(0, quantity - 1))
         }
-      )}
-      disabled={type === "minus" && item.quantity === 1}
-    >
-      {type === "plus" ? (
-        <PlusIcon className="h-4 w-4" />
-      ) : (
-        <MinusIcon className="h-4 w-4" />
-      )}
-    </button>
+        variant="outline"
+        size="icon"
+      >
+        -
+      </Button>
+      <span className="w-8 text-center">{quantity}</span>
+      <Button
+        aria-label="Increase item quantity"
+        onClick={() => updateItemQuantity(variant.id, quantity + 1)}
+        variant="outline"
+        size="icon"
+      >
+        +
+      </Button>
+    </div>
   );
-}
+};

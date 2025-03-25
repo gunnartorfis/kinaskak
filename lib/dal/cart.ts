@@ -150,33 +150,42 @@ export const calculateCartTotals = async (
   cartId: string
 ): Promise<CartState> => {
   const items = await getCartItems(cartId);
-  const cartLines = [];
+  const cartItems = [];
   let totalQuantity = 0;
 
-  // Fetch products and build cart lines
+  // Fetch products and build cart items
   for (const item of items) {
-    if (!item.product_id) continue;
-    const product = await getProductById({ id: item.product_id });
-    if (product) {
-      const variant = product.variants.find((v) => v.id === item.variant_id);
-      if (variant) {
-        cartLines.push({
-          merchandise: {
-            ...variant,
-            product,
-          },
-          quantity: item.quantity,
-        });
-        totalQuantity += item.quantity;
-      }
+    const productId = item.product_id;
+    const variantId = item.variant_id;
+    if (!productId || !variantId) continue;
+
+    const product = await getProductById({ id: productId });
+    if (!product) continue;
+
+    const supabase = await createClient();
+    const { data: variant } = await supabase
+      .from("product_variants")
+      .select("*")
+      .eq("id", variantId)
+      .single();
+
+    if (variant) {
+      cartItems.push({
+        merchandise: {
+          ...variant,
+          product,
+        },
+        quantity: item.quantity,
+      });
+      totalQuantity += item.quantity;
     }
   }
 
   // Calculate totals
-  const subtotalAmount = cartLines
+  const subtotalAmount = cartItems
     .reduce(
       (sum, item) =>
-        sum + parseFloat(item.merchandise.price.amount) * item.quantity,
+        sum + (item.merchandise.price_adjustment || 0) * item.quantity,
       0
     )
     .toFixed(2);
@@ -188,8 +197,9 @@ export const calculateCartTotals = async (
   const totalAmount = subtotalAmount;
 
   return {
-    lines: cartLines,
+    items: cartItems,
     totalQuantity,
+    status: "idle",
     cost: {
       subtotalAmount: {
         amount: subtotalAmount,

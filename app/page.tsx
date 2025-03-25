@@ -1,3 +1,4 @@
+import { getProduct } from "@/lib/store/products";
 import Footer from "components/layout/footer";
 import { MainProductCard } from "components/product/main-product-card";
 
@@ -9,10 +10,13 @@ export const metadata = {
   },
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  const product = await getProduct({ handle: "main-product" });
+  if (!product) return null;
+
   return (
     <>
-      <MainProductCard />
+      <MainProductCard product={product} />
       <Footer />
     </>
   );

@@ -1,5 +1,4 @@
 import { getCollectionProducts } from "lib/store/products";
-import { getImageUrl } from "lib/utils/image";
 import Link from "next/link";
 import { GridTileImage } from "./grid/tile";
 
@@ -27,17 +26,13 @@ export async function Carousel() {
               className="relative h-full w-full"
             >
               <GridTileImage
-                alt={product.title}
+                alt={product.name}
                 label={{
-                  title: product.title,
-                  amount: product.priceRange.maxVariantPrice.amount,
-                  currencyCode: product.priceRange.maxVariantPrice.currencyCode,
+                  title: product.name,
+                  amount: product.base_price.toString(),
+                  currencyCode: "ISK",
                 }}
-                src={
-                  product.featuredImage
-                    ? getImageUrl(product.featuredImage.source)
-                    : ""
-                }
+                src={product.image_url}
                 fill
                 sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
               />

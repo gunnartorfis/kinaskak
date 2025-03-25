@@ -1,47 +1,51 @@
 "use client";
 
-import { AddToCart } from "components/cart/add-to-cart";
-import Price from "components/price";
-import Prose from "components/prose";
-import { Product, ProductVariant } from "lib/store/types";
-import { useProduct } from "./product-context";
+import { Database } from "@/database.types";
+import { useState } from "react";
+import AddToCart from "../cart/add-to-cart";
 import { VariantSelector } from "./variant-selector";
 
-export function ProductDescription({ product }: { product: Product }) {
-  const { updateOption } = useProduct();
+type DbProduct = Database["public"]["Tables"]["products"]["Row"];
+type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
 
-  const handleVariantChange = (variant: ProductVariant) => {
-    variant.selectedOptions.forEach(({ name, value }) => {
-      updateOption(name, value);
-    });
-  };
+export const ProductDescription = ({
+  product,
+  variants,
+}: {
+  product: DbProduct;
+  variants: DbProductVariant[];
+}) => {
+  const [selectedVariant, setSelectedVariant] =
+    useState<DbProductVariant | null>(variants[0] || null);
 
   return (
-    <>
-      <div className="mb-6 flex flex-col border-b pb-6 dark:border-neutral-700">
-        <h1 className="mb-2 text-5xl font-medium">{product.title}</h1>
+    <div className="mb-6 flex flex-col">
+      <div className="mb-6">
+        <h1 className="mb-2 text-5xl font-medium">{product.name}</h1>
         <div className="mr-auto w-auto rounded-full bg-blue-600 p-2 text-sm text-white">
-          <Price
-            amount={product.priceRange.maxVariantPrice.amount}
-            currencyCode={product.priceRange.maxVariantPrice.currencyCode}
-          />
+          <p className="px-2">
+            {(
+              selectedVariant?.price_adjustment || product.base_price
+            ).toLocaleString("is-IS", {
+              style: "currency",
+              currency: "ISK",
+            })}
+          </p>
         </div>
       </div>
-      {product.variants.length > 1 ? (
+      {variants.length > 1 ? (
         <VariantSelector
-          options={product.options}
-          variants={product.variants}
-          selectedVariant={product.variants[0]!}
-          onVariantChange={handleVariantChange}
+          variants={variants}
+          selectedVariant={selectedVariant}
+          setSelectedVariant={setSelectedVariant}
         />
       ) : null}
-      {product.descriptionHtml ? (
-        <Prose
-          className="mb-6 text-sm leading-tight dark:text-white/[60%]"
-          html={product.descriptionHtml}
-        />
-      ) : null}
-      <AddToCart product={product} />
-    </>
+      <p className="mb-6 text-sm font-normal leading-6 text-neutral-500 dark:text-neutral-400">
+        {product.description}
+      </p>
+      {selectedVariant && (
+        <AddToCart variant={selectedVariant} product={product} />
+      )}
+    </div>
   );
-}
+};

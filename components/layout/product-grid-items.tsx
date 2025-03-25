@@ -1,41 +1,16 @@
-import Grid from "components/grid";
-import { GridTileImage } from "components/grid/tile";
-import { Product } from "lib/store/types";
-import { getImageUrl } from "lib/utils/image";
-import Link from "next/link";
+import { Database } from "@/database.types";
+import { MainProductCard } from "../product/main-product-card";
 
-export default function ProductGridItems({
-  products,
-}: {
-  products: Product[];
-}) {
+type DbProduct = Database["public"]["Tables"]["products"]["Row"];
+
+const ProductGridItems = ({ products }: { products: DbProduct[] }) => {
   return (
     <>
       {products.map((product) => (
-        <Grid.Item key={product.handle} className="animate-fadeIn">
-          <Link
-            className="relative inline-block h-full w-full"
-            href={`/product/${product.handle}`}
-            prefetch={true}
-          >
-            <GridTileImage
-              alt={product.title}
-              label={{
-                title: product.title,
-                amount: product.priceRange.maxVariantPrice.amount,
-                currencyCode: product.priceRange.maxVariantPrice.currencyCode,
-              }}
-              src={
-                product.featuredImage
-                  ? getImageUrl(product.featuredImage.source)
-                  : ""
-              }
-              fill
-              sizes="(min-width: 768px) 33vw, (min-width: 640px) 50vw, 100vw"
-            />
-          </Link>
-        </Grid.Item>
+        <MainProductCard key={product.id} product={product} />
       ))}
     </>
   );
-}
+};
+
+export default ProductGridItems;

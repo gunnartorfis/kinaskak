@@ -1,7 +1,12 @@
 "use server";
 
 import { CartState } from "@/components/cart/cart-context";
+import { Database } from "@/database.types";
+import { createClient } from "@/db/supabase/server";
 import { getProductById } from "@/lib/store/products";
+
+type DbProduct = Database["public"]["Tables"]["products"]["Row"];
+type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
 
 const VAT_RATE = 0.24; // 24% VAT rate for physical products in Iceland
 const VAT_MULTIPLIER = 1 + VAT_RATE; // 1.24 for calculating tax-inclusive amounts
@@ -15,32 +20,38 @@ type StorageCartItem = {
 export const calculateCartTotals = async (
   items: StorageCartItem[]
 ): Promise<CartState> => {
-  const cartLines = [];
+  const cartItems = [];
   let totalQuantity = 0;
 
-  // Fetch products and build cart lines
+  // Fetch products and build cart items
   for (const item of items) {
     const product = await getProductById({ id: item.productId });
-    if (product) {
-      const variant = product.variants.find((v) => v.id === item.variantId);
-      if (variant) {
-        cartLines.push({
-          merchandise: {
-            ...variant,
-            product,
-          },
-          quantity: item.quantity,
-        });
-        totalQuantity += item.quantity;
-      }
+    if (!product) continue;
+
+    const supabase = await createClient();
+    const { data: variant } = await supabase
+      .from("product_variants")
+      .select("*")
+      .eq("id", item.variantId)
+      .single();
+
+    if (variant) {
+      cartItems.push({
+        merchandise: {
+          ...variant,
+          product,
+        },
+        quantity: item.quantity,
+      });
+      totalQuantity += item.quantity;
     }
   }
 
   // Calculate totals
-  const subtotalAmount = cartLines
+  const subtotalAmount = cartItems
     .reduce(
       (sum, item) =>
-        sum + parseFloat(item.merchandise.price.amount) * item.quantity,
+        sum + (item.merchandise.price_adjustment || 0) * item.quantity,
       0
     )
     .toFixed(2);
@@ -54,8 +65,9 @@ export const calculateCartTotals = async (
   const totalAmount = subtotalAmount;
 
   return {
-    lines: cartLines,
+    items: cartItems,
     totalQuantity,
+    status: "idle",
     cost: {
       subtotalAmount: {
         amount: subtotalAmount,
