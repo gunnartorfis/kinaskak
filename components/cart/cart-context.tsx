@@ -1,18 +1,16 @@
 "use client";
 
-import { calculateCartTotals } from "@/app/actions/cart";
 import { Product, ProductVariant } from "lib/store/types";
 import { createContext, useContext, useEffect, useState } from "react";
-
-type CartItem = {
-  merchandise: ProductVariant & {
-    product: Product;
-  };
-  quantity: number;
-};
+import { getCart } from "./actions";
 
 export type CartState = {
-  lines: CartItem[];
+  lines: {
+    merchandise: ProductVariant & {
+      product: Product;
+    };
+    quantity: number;
+  }[];
   totalQuantity: number;
   cost: {
     subtotalAmount: {
@@ -39,15 +37,6 @@ type CartContextType = {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-const CART_STORAGE_KEY = "cartItems";
-
-// Only store minimal cart data in sessionStorage
-type StorageCartItem = {
-  variantId: string;
-  productId: string;
-  quantity: number;
-};
-
 const defaultCartState: CartState = {
   lines: [],
   totalQuantity: 0,
@@ -70,14 +59,12 @@ const defaultCartState: CartState = {
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartState>(defaultCartState);
 
-  // Load cart from sessionStorage and calculate totals
+  // Load cart from database
   useEffect(() => {
     const loadCart = async () => {
-      const savedCart = sessionStorage.getItem(CART_STORAGE_KEY);
-      if (savedCart) {
-        const storageItems: StorageCartItem[] = JSON.parse(savedCart);
-        const calculatedCart = await calculateCartTotals(storageItems);
-        setCart(calculatedCart);
+      const cartData = await getCart();
+      if (cartData) {
+        setCart(cartData);
       }
     };
 
@@ -85,67 +72,47 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addCartItem = async (variant: ProductVariant, product: Product) => {
-    const savedCart = sessionStorage.getItem(CART_STORAGE_KEY);
-    const storageItems: StorageCartItem[] = savedCart
-      ? JSON.parse(savedCart)
-      : [];
-
-    const existingItem = storageItems.find(
-      (item) => item.variantId === variant.id
-    );
-
-    let newStorageItems: StorageCartItem[];
-    if (existingItem) {
-      newStorageItems = storageItems.map((item) =>
-        item.variantId === variant.id
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      );
-    } else {
-      newStorageItems = [
-        ...storageItems,
-        {
-          variantId: variant.id,
-          productId: product.id,
-          quantity: 1,
-        },
-      ];
-    }
-
-    sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newStorageItems));
-    const calculatedCart = await calculateCartTotals(newStorageItems);
-    setCart(calculatedCart);
+    await fetch("/api/cart/add", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        variantId: variant.id,
+        productId: product.id,
+      }),
+    });
+    const cartData = await getCart();
+    setCart(cartData ?? defaultCartState);
   };
 
   const removeCartItem = async (variantId: string) => {
-    const savedCart = sessionStorage.getItem(CART_STORAGE_KEY);
-    if (!savedCart) return;
-
-    const storageItems: StorageCartItem[] = JSON.parse(savedCart);
-    const newStorageItems = storageItems.filter(
-      (item) => item.variantId !== variantId
-    );
-
-    sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newStorageItems));
-    const calculatedCart = await calculateCartTotals(newStorageItems);
-    setCart(calculatedCart);
+    await fetch("/api/cart/remove", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        variantId,
+      }),
+    });
+    const cartData = await getCart();
+    setCart(cartData ?? defaultCartState);
   };
 
   const updateCartItem = async (variantId: string, quantity: number) => {
-    const savedCart = sessionStorage.getItem(CART_STORAGE_KEY);
-    if (!savedCart) return;
-
-    const storageItems: StorageCartItem[] = JSON.parse(savedCart);
-    const newStorageItems =
-      quantity > 0
-        ? storageItems.map((item) =>
-            item.variantId === variantId ? { ...item, quantity } : item
-          )
-        : storageItems.filter((item) => item.variantId !== variantId);
-
-    sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newStorageItems));
-    const calculatedCart = await calculateCartTotals(newStorageItems);
-    setCart(calculatedCart);
+    await fetch("/api/cart/update", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        variantId,
+        quantity,
+      }),
+    });
+    const cartData = await getCart();
+    setCart(cartData ?? defaultCartState);
   };
 
   return (
@@ -157,10 +124,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useCart() {
+export const useCart = () => {
   const context = useContext(CartContext);
   if (context === undefined) {
     throw new Error("useCart must be used within a CartProvider");
   }
   return context;
-}
+};

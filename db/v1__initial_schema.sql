@@ -142,6 +142,25 @@ CREATE TABLE subscription_payments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Cart tables
+CREATE TABLE carts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE cart_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cart_id UUID REFERENCES carts(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id),
+    variant_id UUID REFERENCES product_variants(id),
+    quantity INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(cart_id, variant_id)
+);
+
 -- Indexes
 CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_product_variants_product ON product_variants(product_id);
@@ -150,6 +169,8 @@ CREATE INDEX idx_promotional_codes_ecommerce_code ON promotional_codes_ecommerce
 CREATE INDEX idx_subscriptions_user ON subscriptions(user_id);
 CREATE INDEX idx_promotional_codes_subscription_code ON promotional_codes_subscription(code);
 CREATE INDEX idx_subscription_payments_rapyd ON subscription_payments(rapyd_payment_id);
+CREATE INDEX idx_cart_items_cart_id ON cart_items(cart_id);
+CREATE INDEX idx_cart_items_variant_id ON cart_items(variant_id);
 
 -- Enable Row Level Security
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;

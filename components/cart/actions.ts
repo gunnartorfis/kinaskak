@@ -1,6 +1,13 @@
 "use server";
 
 import {
+  addToCart as addToCartDb,
+  calculateCartTotals,
+  getOrCreateCart,
+  removeFromCart as removeFromCartDb,
+  updateCartItemQuantity as updateCartItemQuantityDb,
+} from "@/lib/dal/cart";
+import {
   sendCompanyNotificationEmail,
   sendOrderConfirmationEmail,
 } from "@/lib/email";
@@ -22,63 +29,68 @@ export interface CheckoutItem {
   quantity: number;
 }
 
-const CART_COOKIE = "cart";
+const CART_ID_COOKIE = "cartId";
 
-const getCartFromCookie = async (): Promise<CartItem[]> => {
+const getCartId = async () => {
   const cookieStore = await cookies();
-  const cartCookie = cookieStore.get(CART_COOKIE)?.value;
-  return cartCookie ? JSON.parse(cartCookie) : [];
-};
+  const cartId = cookieStore.get(CART_ID_COOKIE)?.value;
 
-const setCartCookie = async (cart: CartItem[]) => {
-  const cookieStore = await cookies();
-  cookieStore.set(CART_COOKIE, JSON.stringify(cart));
+  if (!cartId) {
+    const cart = await getOrCreateCart();
+    cookieStore.set(CART_ID_COOKIE, cart.id);
+    return cart.id;
+  }
+
+  return cartId;
 };
 
 export const addToCart = async (productId: string) => {
-  const cart = await getCartFromCookie();
+  const cartId = await getCartId();
   const product = await getProductById({ id: productId });
+  if (!product?.variants[0]) return;
 
-  const existingItem = cart.find((item) => item.id === productId);
-  if (existingItem) {
-    existingItem.quantity += 1;
-  } else {
-    cart.push({
-      id: productId,
-      quantity: 1,
-      amount: parseFloat(product?.variants[0]?.price.amount ?? "0"),
-    });
-  }
+  await addToCartDb({
+    cartId,
+    productId,
+    variantId: product.variants[0].id,
+  });
 
-  await setCartCookie(cart);
-  return cart;
+  return calculateCartTotals(cartId);
 };
 
 export const removeFromCart = async (productId: string) => {
-  const cart = await getCartFromCookie();
-  const updatedCart = cart.filter((item) => item.id !== productId);
-  await setCartCookie(updatedCart);
-  return updatedCart;
+  const cartId = await getCartId();
+  const product = await getProductById({ id: productId });
+  if (!product?.variants[0]) return;
+
+  await removeFromCartDb({
+    cartId,
+    variantId: product.variants[0].id,
+  });
+
+  return calculateCartTotals(cartId);
 };
 
 export const updateCartItemQuantity = async (
   productId: string,
   quantity: number
 ) => {
-  const cart = await getCartFromCookie();
+  const cartId = await getCartId();
+  const product = await getProductById({ id: productId });
+  if (!product?.variants[0]) return;
 
-  const item = cart.find((item) => item.id === productId);
-  if (item) {
-    item.quantity = quantity;
-  }
+  await updateCartItemQuantityDb({
+    cartId,
+    variantId: product.variants[0].id,
+    quantity,
+  });
 
-  const updatedCart = cart.filter((item) => item.quantity > 0);
-  await setCartCookie(updatedCart);
-  return updatedCart;
+  return calculateCartTotals(cartId);
 };
 
-export const getCart = async (): Promise<CartItem[]> => {
-  return getCartFromCookie();
+export const getCart = async () => {
+  const cartId = await getCartId();
+  return calculateCartTotals(cartId);
 };
 
 export async function addItem(selectedVariantId: string | undefined) {
@@ -100,16 +112,8 @@ export async function removeItem(merchandiseId: string | undefined) {
   }
 
   try {
-    const cart = await getCart();
-
-    const lineItem = cart.find((line) => line.id === merchandiseId);
-
-    if (lineItem) {
-      await removeFromCart(merchandiseId);
-      revalidateTag(TAGS.cart);
-    } else {
-      return "Item not found in cart";
-    }
+    await removeFromCart(merchandiseId);
+    revalidateTag(TAGS.cart);
   } catch (e) {
     return "Error removing item from cart";
   }
@@ -124,37 +128,11 @@ export async function updateItemQuantity(
   }
 
   try {
-    const cart = await getCart();
-
-    const lineItem = cart.find((line) => line.id === merchandiseId);
-
-    if (lineItem) {
-      if (quantity === 0) {
-        await removeFromCart(merchandiseId);
-      } else {
-        await updateCartItemQuantity(merchandiseId, quantity);
-      }
-    } else if (quantity > 0) {
-      await addToCart(merchandiseId);
-    }
-
+    await updateCartItemQuantity(merchandiseId, quantity);
     revalidateTag(TAGS.cart);
   } catch (e) {
     return "Error updating item quantity";
   }
-}
-
-export async function createCart() {
-  const cart = {
-    id: crypto.randomUUID(),
-  };
-
-  return cart;
-}
-
-export async function createCartAndSetCookie() {
-  let cart = await createCart();
-  (await cookies()).set("cartId", cart.id!);
 }
 
 export async function redirectToCheckout({ items }: { items: CheckoutItem[] }) {
@@ -193,19 +171,18 @@ export async function redirectToCheckout({ items }: { items: CheckoutItem[] }) {
   };
 
   try {
-    // Send both emails in parallel
     await Promise.all([
       sendOrderConfirmationEmail(orderDetails),
       sendCompanyNotificationEmail(orderDetails),
     ]);
   } catch (error) {
     console.error("Failed to send order emails:", error);
-    // Continue with checkout even if emails fail
   }
 
-  // clear cart cookie
+  // Clear cart after successful checkout
+  const cartId = await getCartId();
   const cookieStore = await cookies();
-  cookieStore.delete("cart");
+  cookieStore.delete(CART_ID_COOKIE);
 
   redirect(checkout.redirect_url);
 }
@@ -217,7 +194,6 @@ const getBaseCheckoutRedirectUrl = () => {
     throw new Error("NEXT_PUBLIC_VERCEL_URL is not set");
   }
 
-  // if the url doesn't start with https://, add it
   if (!url.startsWith("https://")) {
     return "https://" + url;
   }

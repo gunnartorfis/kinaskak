@@ -19,26 +19,13 @@ const transformVariant = (
   },
 });
 
-const transformProductToVariant = (product: DbProduct): ProductVariant => {
-  return {
-    id: product.id,
-    title: product.name,
-    availableForSale: product.is_available ?? true,
-    price: {
-      amount: product.base_price.toString(),
-      currencyCode: "ISK",
-    },
-    selectedOptions: [{ name: "Default", value: "Default" }],
-  };
-};
-
 const transformProduct = (
   product: DbProduct,
   variants: DbProductVariant[]
 ): Product => {
-  const productVariants = variants.length
-    ? variants.map((v) => transformVariant(v, product.name))
-    : [transformProductToVariant(product)];
+  const productVariants = variants.map((v) =>
+    transformVariant(v, product.name)
+  );
 
   const prices = productVariants.map((v) => parseFloat(v.price.amount));
   const minPrice = Math.min(...prices, product.base_price);
