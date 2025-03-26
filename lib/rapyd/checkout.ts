@@ -26,6 +26,7 @@ interface CreateCheckoutParams {
   completeCheckoutUrl: string;
   cancelCheckoutUrl: string;
   description?: string;
+  metadata?: Record<string, any>;
 }
 
 const DEFAULT_CHECKOUT_CONFIG = {
@@ -44,6 +45,7 @@ export const createCheckout = cache(
     completeCheckoutUrl,
     cancelCheckoutUrl,
     description,
+    metadata,
   }: CreateCheckoutParams): Promise<CheckoutResponse> => {
     const checkoutBody = {
       amount,
@@ -56,9 +58,7 @@ export const createCheckout = cache(
       custom_elements: {
         billing_address_collect: true,
       },
-      metadata: {
-        // TODO: email, name, phone, address
-      },
+      metadata,
       ...(description && { description }),
     };
 

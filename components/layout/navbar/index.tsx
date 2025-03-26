@@ -1,8 +1,6 @@
 import CartModal from "@/components/cart/modal";
 import { getMenu } from "@/lib/store/menu";
 
-const { SITE_NAME } = process.env;
-
 export async function Navbar() {
   const menu = await getMenu("navbar");
 

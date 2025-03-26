@@ -1,7 +1,7 @@
 "use client";
 
 import { Database } from "@/database.types";
-import { createContext, useContext, useReducer } from "react";
+import { createContext, use, useContext, useReducer } from "react";
 
 type DbCartItem = Database["public"]["Tables"]["cart_items"]["Row"];
 type DbProduct = Database["public"]["Tables"]["products"]["Row"];
@@ -14,6 +14,7 @@ export interface CartContextStateItem {
 }
 
 interface CartContextState {
+  id: string;
   items: CartContextStateItem[];
   status: "idle" | "loading" | "error";
 }
@@ -104,16 +105,21 @@ const cartReducer = (
 
 interface CartProviderProps {
   children: React.ReactNode;
-  initialItems?: CartContextStateItem[];
+  initialItems?: Promise<CartContextStateItem[]>;
+  id: Promise<string>;
 }
 
 export const CartProvider = ({
   children,
-  initialItems = [],
+  initialItems,
+  id: idPromise,
 }: CartProviderProps) => {
+  const items = initialItems ? use(initialItems) : [];
+  const id = use(idPromise);
   const [cart, dispatch] = useReducer(cartReducer, {
-    items: initialItems,
+    items,
     status: "idle",
+    id,
   });
 
   const addItem = (item: CartContextState["items"][number]) => {

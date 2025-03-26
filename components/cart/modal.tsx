@@ -9,14 +9,12 @@ import {
   TransitionChild,
 } from "@headlessui/react";
 import { ShoppingCartIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import LoadingDots from "components/loading-dots";
 import Price from "components/price";
 import { DEFAULT_OPTION } from "lib/constants";
 import { createUrl } from "lib/utils";
 import Image from "next/image";
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
 import { useCart } from "./cart-context";
 import { DeleteItemButton } from "./delete-item-button";
 import { EditItemQuantityButton } from "./edit-item-quantity-button";
@@ -27,7 +25,7 @@ type MerchandiseSearchParams = {
 };
 
 export default function CartModal() {
-  const { cart, updateItemQuantity, removeItem } = useCart();
+  const { cart } = useCart();
   const cartTotals = useCartTotals();
   const [isOpen, setIsOpen] = useState(false);
   const quantityRef = useRef(cartTotals.totalQuantity);
@@ -220,13 +218,14 @@ export default function CartModal() {
                       />
                     </div>
                   </div>
-                  <form
-                    action={() => {
-                      console.log("checkout!");
-                    }}
+                  <Link
+                    href={`/checkout/${cart.id}/information`}
+                    onClick={closeCart}
                   >
-                    <CheckoutButton />
-                  </form>
+                    <Button className="w-full" type="submit">
+                      Áfram í greiðslu
+                    </Button>
+                  </Link>
                 </div>
               )}
             </DialogPanel>
@@ -234,15 +233,5 @@ export default function CartModal() {
         </Dialog>
       </Transition>
     </>
-  );
-}
-
-function CheckoutButton() {
-  const { pending } = useFormStatus();
-
-  return (
-    <Button className="w-full" type="submit" disabled={pending}>
-      {pending ? <LoadingDots className="bg-white" /> : "Áfram í greiðslu"}
-    </Button>
   );
 }

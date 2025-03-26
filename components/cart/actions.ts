@@ -1,5 +1,3 @@
-"use server";
-
 import { Database } from "@/database.types";
 import { createClient } from "@/db/supabase/server";
 import {
@@ -9,12 +7,9 @@ import {
   removeFromCart as removeFromCartDb,
   updateCartItemQuantity as updateCartItemQuantityDb,
 } from "@/lib/dal/cart";
-import { createCheckout } from "@/lib/rapyd/checkout";
-import { getProductsByIds } from "@/lib/store/products";
 import { TAGS } from "lib/constants";
 import { revalidateTag } from "next/cache";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 
 type DbProduct = Database["public"]["Tables"]["products"]["Row"];
 type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
@@ -32,7 +27,7 @@ export interface CheckoutItem {
 
 const CART_ID_COOKIE = "cartId";
 
-const getCartId = async () => {
+export const getCartId = async () => {
   const cookieStore = await cookies();
   const cartId = cookieStore.get(CART_ID_COOKIE)?.value;
 
@@ -148,73 +143,3 @@ export async function updateItemQuantity(
     return "Error updating item quantity";
   }
 }
-
-export async function redirectToCheckout({ items }: { items: CheckoutItem[] }) {
-  const products = await getProductsByIds({
-    ids: items.map((item) => item.id),
-  });
-
-  const cartItems = await Promise.all(
-    items.map(async ({ id, quantity }) => {
-      const product = products.find((p) => p.id === id);
-      if (!product) return null;
-
-      const variant = await getProductVariant(product.id);
-      const amount = variant?.price_adjustment ?? product.base_price;
-
-      return {
-        id,
-        quantity,
-        amount,
-        name: product.name,
-      };
-    })
-  );
-
-  const validCartItems = cartItems.filter(
-    (item): item is NonNullable<typeof item> => item !== null
-  );
-
-  const totalAmount = validCartItems.reduce(
-    (acc, item) => acc + item.quantity * item.amount,
-    0
-  );
-
-  const merchantReferenceId = crypto.randomUUID();
-  const checkout = await createCheckout({
-    amount: totalAmount,
-    description: "Cart",
-    merchantReferenceId,
-    completeCheckoutUrl: getBaseCheckoutRedirectUrl() + "/order-successful",
-    cancelCheckoutUrl: getBaseCheckoutRedirectUrl() + "/order-error",
-  });
-
-  const orderDetails = {
-    items: validCartItems,
-    totalAmount,
-    merchantReferenceId,
-  };
-
-  // TODO: we need to store something in the database here!
-
-  // Clear cart after successful checkout
-  const cartId = await getCartId();
-  const cookieStore = await cookies();
-  cookieStore.delete(CART_ID_COOKIE);
-
-  redirect(checkout.redirect_url);
-}
-
-const getBaseCheckoutRedirectUrl = () => {
-  const url = process.env.NEXT_PUBLIC_VERCEL_URL;
-
-  if (!url) {
-    throw new Error("NEXT_PUBLIC_VERCEL_URL is not set");
-  }
-
-  if (!url.startsWith("https://")) {
-    return "https://" + url;
-  }
-
-  return url;
-};

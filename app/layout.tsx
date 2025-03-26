@@ -1,5 +1,4 @@
 import CartProviderServer from "@/components/cart/cart-provider-server";
-import { Navbar } from "@/components/layout/navbar";
 import { Inter } from "next/font/google";
 import { ReactNode } from "react";
 import { Toaster } from "sonner";
@@ -12,7 +11,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body className={inter.className} suppressHydrationWarning>
         <CartProviderServer>
-          <Navbar />
           <main>
             {children}
             <Toaster closeButton />

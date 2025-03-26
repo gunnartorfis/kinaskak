@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Database } from "@/database.types";
+import { X } from "lucide-react";
 import { useActionState } from "react";
 import { removeItem } from "./actions";
 import { useCart } from "./cart-context";
@@ -42,8 +43,9 @@ export const DeleteItemButton = ({
         onClick={handleClick}
         variant="outline"
         size="icon"
+        className="size-6"
       >
-        X
+        <X size={12} />
       </Button>
       <p aria-live="polite" className="sr-only" role="status">
         {message}

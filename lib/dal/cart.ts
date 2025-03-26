@@ -59,8 +59,10 @@ export const getOrCreateCart = async (userId?: string): Promise<DbCart> => {
 };
 
 export const getCartItems = async (
-  cartId: string
+  cartIdPromise: Promise<string> | string
 ): Promise<CartItemWithDetails[]> => {
+  const cartId =
+    typeof cartIdPromise === "string" ? cartIdPromise : await cartIdPromise;
   const supabase = await createClient();
   const { data: items } = await supabase
     .from("cart_items")
