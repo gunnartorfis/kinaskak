@@ -114,6 +114,77 @@ export type Database = {
           },
         ]
       }
+      checkouts: {
+        Row: {
+          address: string
+          amount: number
+          apartment: string | null
+          cart_id: string
+          checkout_id: string
+          city: string
+          created_at: string
+          email: string
+          first_name: string
+          id: string
+          kennitala: string
+          last_name: string
+          marketing_opt_in: boolean
+          merchant_reference_id: string
+          metadata: Json | null
+          save_info: boolean
+          status: Database["public"]["Enums"]["checkout_status"]
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          amount: number
+          apartment?: string | null
+          cart_id: string
+          checkout_id: string
+          city: string
+          created_at?: string
+          email: string
+          first_name: string
+          id?: string
+          kennitala: string
+          last_name: string
+          marketing_opt_in?: boolean
+          merchant_reference_id: string
+          metadata?: Json | null
+          save_info?: boolean
+          status?: Database["public"]["Enums"]["checkout_status"]
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          amount?: number
+          apartment?: string | null
+          cart_id?: string
+          checkout_id?: string
+          city?: string
+          created_at?: string
+          email?: string
+          first_name?: string
+          id?: string
+          kennitala?: string
+          last_name?: string
+          marketing_opt_in?: boolean
+          merchant_reference_id?: string
+          metadata?: Json | null
+          save_info?: boolean
+          status?: Database["public"]["Enums"]["checkout_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkouts_cart_id_fkey"
+            columns: ["cart_id"]
+            isOneToOne: false
+            referencedRelation: "carts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string | null
@@ -276,7 +347,7 @@ export type Database = {
           is_available: boolean | null
           name: string
           price_adjustment: number | null
-          product_id: string | null
+          product_id: string
           sku: string | null
           updated_at: string | null
         }
@@ -286,7 +357,7 @@ export type Database = {
           is_available?: boolean | null
           name: string
           price_adjustment?: number | null
-          product_id?: string | null
+          product_id: string
           sku?: string | null
           updated_at?: string | null
         }
@@ -296,7 +367,7 @@ export type Database = {
           is_available?: boolean | null
           name?: string
           price_adjustment?: number | null
-          product_id?: string | null
+          product_id?: string
           sku?: string | null
           updated_at?: string | null
         }
@@ -613,7 +684,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      checkout_status: "pending" | "completed" | "cancelled" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
