@@ -1,6 +1,4 @@
-import { createHmac, randomBytes } from "crypto";
-import type { IncomingHttpHeaders } from "http";
-import https from "https";
+import type { IncomingHttpHeaders, IncomingMessage } from "http";
 
 interface RapydRequestOptions {
   method: "get" | "put" | "post" | "delete";
@@ -32,21 +30,25 @@ const makeRequest = async ({
   body = null,
 }: RapydRequestOptions): Promise<RapydResponse> => {
   try {
+    const { createHmac, randomBytes } = await import("crypto");
+    const https = await import("https");
+
     const httpMethod = method.toLowerCase();
     const httpBaseURL = BASE_URL.replace(/^https?:\/\//, "").replace(
       /\/+$/,
       ""
     );
     const httpURLPath = urlPath.startsWith("/") ? urlPath : `/${urlPath}`;
-    const salt = generateRandomString(8);
+    const salt = generateRandomString(randomBytes, 8);
     const idempotency = new Date().getTime().toString();
     const timestamp = Math.round(new Date().getTime() / 1000);
-    const signature = sign({
+    const signature = await sign({
       method: httpMethod,
       urlPath: httpURLPath,
       salt,
       timestamp,
       body,
+      createHmac,
     });
 
     const options = {
@@ -64,7 +66,7 @@ const makeRequest = async ({
       },
     };
 
-    return await httpRequest(options, body);
+    return await httpRequest(https, options, body);
   } catch (error) {
     console.error("Error generating request options:", error);
     throw error;
@@ -77,15 +79,17 @@ interface SignOptions {
   salt: string;
   timestamp: number;
   body: Record<string, unknown> | null;
+  createHmac: (typeof import("crypto"))["createHmac"];
 }
 
-const sign = ({
+const sign = async ({
   method,
   urlPath,
   salt,
   timestamp,
   body,
-}: SignOptions): string => {
+  createHmac,
+}: SignOptions): Promise<string> => {
   try {
     let bodyString = "";
     if (body) {
@@ -115,7 +119,10 @@ const sign = ({
   }
 };
 
-const generateRandomString = (size: number): string => {
+const generateRandomString = (
+  randomBytes: (typeof import("crypto"))["randomBytes"],
+  size: number
+): string => {
   try {
     return randomBytes(size).toString("hex");
   } catch (error) {
@@ -133,6 +140,7 @@ interface HttpRequestOptions {
 }
 
 const httpRequest = async (
+  https: typeof import("https"),
   options: HttpRequestOptions,
   body: Record<string, unknown> | null
 ): Promise<RapydResponse> => {
@@ -142,7 +150,7 @@ const httpRequest = async (
 
       log && console.log(`httpRequest options: ${JSON.stringify(options)}`);
 
-      const req = https.request(options, (res) => {
+      const req = https.request(options, (res: IncomingMessage) => {
         let responseData = "";
         const response: Omit<RapydResponse, "body"> & { body: string } = {
           statusCode: res.statusCode ?? 500,

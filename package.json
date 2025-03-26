@@ -7,11 +7,13 @@
     "prettier": "prettier --write --ignore-unknown .",
     "prettier:check": "prettier --check --ignore-unknown .",
     "test": "pnpm prettier:check",
+    "typecheck": "tsc --noEmit",
     "codegen": "pnpm dlx supabase gen types typescript --project-id htjiazsdirmgrlbyohqr --schema public > database.types.ts"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.0",
     "@heroicons/react": "^2.2.0",
+    "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-separator": "^1.1.2",
     "@radix-ui/react-slot": "^1.1.2",
     "@supabase/ssr": "^0.6.1",

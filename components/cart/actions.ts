@@ -1,5 +1,7 @@
 "use server";
 
+import { Database } from "@/database.types";
+import { createClient } from "@/db/supabase/server";
 import {
   addToCart as addToCartDb,
   calculateCartTotals,
@@ -7,16 +9,15 @@ import {
   removeFromCart as removeFromCartDb,
   updateCartItemQuantity as updateCartItemQuantityDb,
 } from "@/lib/dal/cart";
-import {
-  sendCompanyNotificationEmail,
-  sendOrderConfirmationEmail,
-} from "@/lib/email";
 import { createCheckout } from "@/lib/rapyd/checkout";
-import { getProductById, getProductsByIds } from "@/lib/store/products";
+import { getProductsByIds } from "@/lib/store/products";
 import { TAGS } from "lib/constants";
 import { revalidateTag } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+
+type DbProduct = Database["public"]["Tables"]["products"]["Row"];
+type DbProductVariant = Database["public"]["Tables"]["product_variants"]["Row"];
 
 export interface CartItem {
   id: string;
@@ -44,44 +45,57 @@ const getCartId = async () => {
   return cartId;
 };
 
-export const addToCart = async (productId: string) => {
-  const cartId = await getCartId();
-  const product = await getProductById({ id: productId });
-  if (!product?.variants[0]) return;
+const getProductVariant = async (
+  variantId: string
+): Promise<DbProductVariant | null> => {
+  const supabase = await createClient();
+  const { data: variant } = await supabase
+    .from("product_variants")
+    .select("*")
+    .eq("id", variantId)
+    .limit(1)
+    .single();
 
+  return variant;
+};
+
+export const addToCart = async (variantId: string) => {
+  const cartId = await getCartId();
+  const variant = await getProductVariant(variantId);
+  if (!variant) return;
   await addToCartDb({
     cartId,
-    productId,
-    variantId: product.variants[0].id,
+    productId: variant.product_id,
+    variantId: variant.id,
   });
 
   return calculateCartTotals(cartId);
 };
 
-export const removeFromCart = async (productId: string) => {
+export const removeFromCart = async (variantId: string) => {
   const cartId = await getCartId();
-  const product = await getProductById({ id: productId });
-  if (!product?.variants[0]) return;
+  const variant = await getProductVariant(variantId);
+  if (!variant) return;
 
   await removeFromCartDb({
     cartId,
-    variantId: product.variants[0].id,
+    variantId: variant.id,
   });
 
   return calculateCartTotals(cartId);
 };
 
 export const updateCartItemQuantity = async (
-  productId: string,
+  variantId: string,
   quantity: number
 ) => {
   const cartId = await getCartId();
-  const product = await getProductById({ id: productId });
-  if (!product?.variants[0]) return;
+  const variant = await getProductVariant(variantId);
+  if (!variant) return;
 
   await updateCartItemQuantityDb({
     cartId,
-    variantId: product.variants[0].id,
+    variantId: variant.id,
     quantity,
   });
 
@@ -106,13 +120,13 @@ export async function addItem(selectedVariantId: string | undefined) {
   }
 }
 
-export async function removeItem(merchandiseId: string | undefined) {
-  if (!merchandiseId) {
-    return "Missing product ID";
+export async function removeItem(selectedVariantId: string | undefined) {
+  if (!selectedVariantId) {
+    return "Missing product variant ID";
   }
 
   try {
-    await removeFromCart(merchandiseId);
+    await removeFromCart(selectedVariantId);
     revalidateTag(TAGS.cart);
   } catch (e) {
     return "Error removing item from cart";
@@ -120,15 +134,15 @@ export async function removeItem(merchandiseId: string | undefined) {
 }
 
 export async function updateItemQuantity(
-  merchandiseId: string | undefined,
+  variantId: string | undefined,
   quantity: number
 ) {
-  if (!merchandiseId) {
-    return "Missing product ID";
+  if (!variantId) {
+    return "Missing product variant ID";
   }
 
   try {
-    await updateCartItemQuantity(merchandiseId, quantity);
+    await updateCartItemQuantity(variantId, quantity);
     revalidateTag(TAGS.cart);
   } catch (e) {
     return "Error updating item quantity";
@@ -139,18 +153,29 @@ export async function redirectToCheckout({ items }: { items: CheckoutItem[] }) {
   const products = await getProductsByIds({
     ids: items.map((item) => item.id),
   });
-  const cartItems = items.map(({ id, quantity }) => {
-    const item = products.find((product) => product.id === id);
-    const amount = item?.variants[0]?.price.amount ?? "0";
-    return {
-      id,
-      quantity,
-      amount: parseFloat(amount),
-      name: item?.title ?? "Unknown Product",
-    };
-  });
 
-  const totalAmount = cartItems.reduce(
+  const cartItems = await Promise.all(
+    items.map(async ({ id, quantity }) => {
+      const product = products.find((p) => p.id === id);
+      if (!product) return null;
+
+      const variant = await getProductVariant(product.id);
+      const amount = variant?.price_adjustment ?? product.base_price;
+
+      return {
+        id,
+        quantity,
+        amount,
+        name: product.name,
+      };
+    })
+  );
+
+  const validCartItems = cartItems.filter(
+    (item): item is NonNullable<typeof item> => item !== null
+  );
+
+  const totalAmount = validCartItems.reduce(
     (acc, item) => acc + item.quantity * item.amount,
     0
   );
@@ -165,19 +190,12 @@ export async function redirectToCheckout({ items }: { items: CheckoutItem[] }) {
   });
 
   const orderDetails = {
-    items: cartItems,
+    items: validCartItems,
     totalAmount,
     merchantReferenceId,
   };
 
-  try {
-    await Promise.all([
-      sendOrderConfirmationEmail(orderDetails),
-      sendCompanyNotificationEmail(orderDetails),
-    ]);
-  } catch (error) {
-    console.error("Failed to send order emails:", error);
-  }
+  // TODO: we need to store something in the database here!
 
   // Clear cart after successful checkout
   const cartId = await getCartId();

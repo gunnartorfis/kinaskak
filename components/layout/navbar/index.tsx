@@ -1,5 +1,5 @@
+import CartModal from "@/components/cart/modal";
 import { getMenu } from "@/lib/store/menu";
-import CartModal from "components/cart/modal";
 
 const { SITE_NAME } = process.env;
 

@@ -1,68 +1,32 @@
-import { GridTileImage } from "components/grid/tile";
-import { getCollectionProducts } from "lib/store/products";
-import type { Product } from "lib/store/types";
-import { getImageUrl } from "lib/utils/image";
-import Link from "next/link";
+import { MainProductCard } from "@/components/product/main-product-card";
+import { Database } from "@/database.types";
 
-function ThreeItemGridItem({
-  item,
-  size,
-  priority,
-}: {
-  item: Product;
-  size: "full" | "half";
-  priority?: boolean;
-}) {
-  return (
-    <div
-      className={
-        size === "full"
-          ? "md:col-span-4 md:row-span-2"
-          : "md:col-span-2 md:row-span-1"
-      }
-    >
-      <Link
-        className="relative block aspect-square h-full w-full"
-        href={`/product/${item.handle}`}
-        prefetch={true}
-      >
-        <GridTileImage
-          src={getImageUrl(item.featuredImage.source)}
-          fill
-          sizes={
-            size === "full"
-              ? "(min-width: 768px) 66vw, 100vw"
-              : "(min-width: 768px) 33vw, 100vw"
-          }
-          priority={priority}
-          alt={item.title}
-          label={{
-            position: size === "full" ? "center" : "bottom",
-            title: item.title as string,
-            amount: item.priceRange.maxVariantPrice.amount,
-            currencyCode: item.priceRange.maxVariantPrice.currencyCode,
-          }}
-        />
-      </Link>
-    </div>
-  );
-}
+type DbProduct = Database["public"]["Tables"]["products"]["Row"];
 
-export async function ThreeItemGrid() {
-  // Collections that start with `hidden-*` are hidden from the search page.
-  const homepageItems = await getCollectionProducts({
-    collection: "hidden-homepage-featured-items",
-  });
+const ThreeItemsGrid = ({ products }: { products: DbProduct[] }) => {
+  if (products.length < 1) return null;
 
-  if (!homepageItems[0] || !homepageItems[1] || !homepageItems[2]) return null;
-
-  const [firstProduct, secondProduct, thirdProduct] = homepageItems;
+  // Since we check length above, we know first exists
+  const first = products[0] as DbProduct;
+  const rest = products.slice(1);
 
   return (
-    <section className="mx-auto grid max-w-(--breakpoint-2xl) gap-4 px-4 pb-4 md:grid-cols-6 md:grid-rows-2 lg:max-h-[calc(100vh-200px)]">
-      <ThreeItemGridItem size="full" item={firstProduct} priority={true} />
-      <ThreeItemGridItem size="half" item={secondProduct} priority={true} />
-      <ThreeItemGridItem size="half" item={thirdProduct} />
+    <section className="mx-auto grid max-w-screen-2xl gap-4 px-4 pb-4 md:grid-cols-6 md:grid-rows-2">
+      <div className="md:col-span-4 md:row-span-2">
+        <MainProductCard product={first} />
+      </div>
+      {rest[0] && (
+        <div className="md:col-span-2 md:row-span-1">
+          <MainProductCard product={rest[0]} />
+        </div>
+      )}
+      {rest[1] && (
+        <div className="md:col-span-2 md:row-span-1">
+          <MainProductCard product={rest[1]} />
+        </div>
+      )}
     </section>
   );
-}
+};
+
+export default ThreeItemsGrid;
