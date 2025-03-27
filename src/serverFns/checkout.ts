@@ -1,0 +1,195 @@
+import { Database, Json } from "@/database/database.types";
+import { getSupabaseServerClient } from "@/lib/supabase";
+import {
+  ShippingFormData,
+  shippingFormSchema,
+} from "@/lib/validations/shipping";
+import { getCartItems } from "@/serverFns/cart";
+import { z } from "zod";
+import { redirect } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
+import { makeRequest } from "@/lib/rapyd/make-rapyd-request";
+
+export const redirectToCheckout = createServerFn({ method: "POST" })
+  .validator((data: unknown) =>
+    shippingFormSchema.extend({ cartId: z.string() }).parse(data)
+  )
+  .handler(async ({ data: { cartId, ...shippingDetails } }) => {
+    const cartItems = await getCartItems({
+      data: {
+        cartId,
+      },
+    });
+
+    const totalAmount = cartItems.reduce(
+      (acc, item) =>
+        acc +
+        item.quantity *
+          (item.variant.price_adjustment ?? item.product.base_price),
+      0
+    );
+
+    const merchantReferenceId = crypto.randomUUID();
+
+    const orderDetails = {
+      items: cartItems,
+      totalAmount,
+      shippingDetails,
+      merchantReferenceId,
+    };
+
+    const checkout = await createCheckout({
+      amount: totalAmount,
+      description: "Cart",
+      merchantReferenceId,
+
+      completeCheckoutUrl: getBaseCheckoutRedirectUrl() + "/order-successful",
+      cancelCheckoutUrl: getBaseCheckoutRedirectUrl() + "/order-error",
+      metadata: {
+        orderDetails,
+      },
+    });
+
+    const checkoutRecord = await createCheckoutRecord({
+      cartId,
+      merchantReferenceId,
+      checkoutId: checkout.id,
+      amount: totalAmount,
+      shippingDetails,
+    });
+
+    return {
+      redirectUrl: `${checkout.redirect_url}?checkoutId=${checkoutRecord.id}`,
+    };
+  });
+
+const getBaseCheckoutRedirectUrl = () => {
+  const url = process.env.NEXT_PUBLIC_VERCEL_URL;
+
+  if (!url) {
+    throw new Error("NEXT_PUBLIC_VERCEL_URL is not set");
+  }
+
+  if (!url.startsWith("https://")) {
+    return "https://" + url;
+  }
+
+  return url;
+};
+
+interface CreateCheckoutRecordParams {
+  cartId: string;
+  merchantReferenceId: string;
+  checkoutId: string;
+  amount: number;
+  shippingDetails: ShippingFormData;
+  metadata?: Json;
+}
+
+type CheckoutRecord = Database["public"]["Tables"]["checkouts"]["Row"];
+
+const createCheckoutRecord = async ({
+  cartId,
+  merchantReferenceId,
+  checkoutId,
+  amount,
+  shippingDetails,
+  metadata,
+}: CreateCheckoutRecordParams): Promise<CheckoutRecord> => {
+  const supabase = await getSupabaseServerClient();
+
+  const { data: checkout, error } = await supabase
+    .from("checkouts")
+    .insert({
+      cart_id: cartId,
+      merchant_reference_id: merchantReferenceId,
+      checkout_id: checkoutId,
+      amount,
+      email: shippingDetails.email,
+      first_name: shippingDetails.firstName,
+      last_name: shippingDetails.lastName,
+      kennitala: shippingDetails.kennitala,
+      address: shippingDetails.address,
+      apartment: shippingDetails.apartment,
+      city: shippingDetails.city,
+      save_info: shippingDetails.saveInfo,
+      marketing_opt_in: shippingDetails.marketingOptIn,
+      metadata,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error("Failed to create checkout record");
+  }
+
+  return checkout;
+};
+
+// Icelandic card payment methods
+const ICELANDIC_PAYMENT_METHODS = [
+  "is_visa_card",
+  "is_mastercard_card",
+] as const;
+
+interface CheckoutResponse {
+  id: string;
+  redirect_url: string;
+  status: string;
+  payment: {
+    id: string;
+    amount: number;
+    currency: string;
+    status: string;
+  };
+}
+
+interface CreateCheckoutParams {
+  amount: number;
+  merchantReferenceId: string;
+  completeCheckoutUrl: string;
+  cancelCheckoutUrl: string;
+  description?: string;
+  metadata?: Json;
+}
+
+const DEFAULT_CHECKOUT_CONFIG = {
+  country: "IS",
+  currency: "ISK",
+} as const;
+
+const createCheckout = async ({
+  amount,
+  merchantReferenceId,
+  completeCheckoutUrl,
+  cancelCheckoutUrl,
+  description,
+  metadata,
+}: CreateCheckoutParams): Promise<CheckoutResponse> => {
+  const checkoutBody = {
+    amount,
+    merchant_reference_id: merchantReferenceId,
+    complete_checkout_url: completeCheckoutUrl,
+    cancel_checkout_url: cancelCheckoutUrl,
+    country: DEFAULT_CHECKOUT_CONFIG.country,
+    currency: DEFAULT_CHECKOUT_CONFIG.currency,
+    payment_method_types_include: ICELANDIC_PAYMENT_METHODS,
+    custom_elements: {
+      billing_address_collect: true,
+    },
+    metadata,
+    ...(description && { description }),
+  };
+
+  const response = await makeRequest({
+    method: "post",
+    urlPath: "/v1/checkout",
+    body: checkoutBody,
+  });
+
+  console.log(response.body.data);
+
+  return response.body.data as unknown as CheckoutResponse;
+};
+
+export type { CheckoutResponse, CreateCheckoutParams };
