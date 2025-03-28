@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { redirectToCheckout } from "@/serverFns/checkout";
@@ -135,21 +136,20 @@ const ShippingForm: FC<ShippingFormProps> = ({ cartId }) => {
           )}
         </div>
 
-        <div>
-          <Label htmlFor="apartment">Íbúð, hæð o.s.frv. (valfrjálst)</Label>
-          <input
-            type="text"
-            id="apartment"
-            name="apartment"
-            className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2"
-          />
-          {errors.apartment && (
-            <p className="mt-1 text-sm text-red-500">{errors.apartment}</p>
-          )}
-        </div>
-
-        <div className="grid grid-cols-6 gap-4">
-          <div className="col-span-2">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="apartment">Íbúð, hæð o.s.frv. (valfrjálst)</Label>
+            <input
+              type="text"
+              id="apartment"
+              name="apartment"
+              className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2"
+            />
+            {errors.apartment && (
+              <p className="mt-1 text-sm text-red-500">{errors.apartment}</p>
+            )}
+          </div>
+          <div>
             <Label htmlFor="city">Sveitarfélag</Label>
             <input
               type="text"
@@ -165,12 +165,9 @@ const ShippingForm: FC<ShippingFormProps> = ({ cartId }) => {
         </div>
       </div>
 
-      <button
-        type="submit"
-        className="w-full rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-      >
+      <Button type="submit" className="w-full">
         Halda áfram í sendingu
-      </button>
+      </Button>
     </form>
   );
 };

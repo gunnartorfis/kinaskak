@@ -1,3 +1,5 @@
+import { formatPrice } from "@/components/price";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/context/cart-context";
 import { Database } from "@/database/database.types";
@@ -15,14 +17,18 @@ export const ProductDescription = ({
   variant: DbProductVariant;
 }) => {
   const { addItem, cartId, setCartId } = useCart();
+
   return (
     <div className="mb-6 flex flex-col">
-      <div className="mb-6">
-        <h1 className="mb-2 text-5xl font-medium">{product.name}</h1>
+      <div className="mb-0">
+        <h1 className="mb-2 text-4xl font-medium">{product.name}</h1>
       </div>
       <p className="mb-6 text-sm font-normal leading-6 text-neutral-500 dark:text-neutral-400">
         {product.description}
       </p>
+      <Badge variant="outline" className="mb-4">
+        {formatPrice(variant.price_adjustment ?? product.base_price, "ISK")}
+      </Badge>
       <form
         onSubmit={async (e) => {
           e.preventDefault();
