@@ -1,9 +1,8 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { type ShippingFormData } from "@/lib/validations/shipping";
 import { redirectToCheckout } from "@/serverFns/checkout";
-import { redirect, useNavigate } from "@tanstack/react-router";
-import React, { useActionState, useState, type FC } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { useState, type FC } from "react";
 import { toast } from "sonner";
 import { ZodError } from "zod";
 
@@ -22,10 +21,12 @@ const ShippingForm: FC<ShippingFormProps> = ({ cartId }) => {
         e.preventDefault();
         const formData = new FormData(e.target as HTMLFormElement);
         try {
+          const { marketingOptIn, ...rest } = Object.fromEntries(formData);
           const { redirectUrl } = await redirectToCheckout({
             data: {
               cartId,
-              ...Object.fromEntries(formData),
+              marketingOptIn: marketingOptIn === "on",
+              ...rest,
             },
           });
 
@@ -161,11 +162,6 @@ const ShippingForm: FC<ShippingFormProps> = ({ cartId }) => {
               <p className="mt-1 text-sm text-red-500">{errors.city}</p>
             )}
           </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Checkbox id="saveInfo" name="saveInfo" />
-          <Label htmlFor="saveInfo">Vista þessar upplýsingar fyrir næst</Label>
         </div>
       </div>
 

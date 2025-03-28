@@ -1,14 +1,14 @@
 import { Database, Json } from "@/database/database.types";
+import { makeRequest } from "@/lib/rapyd/make-rapyd-request";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import {
   ShippingFormData,
   shippingFormSchema,
 } from "@/lib/validations/shipping";
 import { getCartItems } from "@/serverFns/cart";
-import { z } from "zod";
-import { redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { makeRequest } from "@/lib/rapyd/make-rapyd-request";
+import { z } from "zod";
+import nodemailer from "nodemailer";
 
 export const redirectToCheckout = createServerFn({ method: "POST" })
   .validator((data: unknown) =>
@@ -42,7 +42,6 @@ export const redirectToCheckout = createServerFn({ method: "POST" })
       amount: totalAmount,
       description: "Cart",
       merchantReferenceId,
-
       completeCheckoutUrl: getBaseCheckoutRedirectUrl() + "/order-successful",
       cancelCheckoutUrl: getBaseCheckoutRedirectUrl() + "/order-error",
       metadata: {
@@ -56,6 +55,11 @@ export const redirectToCheckout = createServerFn({ method: "POST" })
       checkoutId: checkout.id,
       amount: totalAmount,
       shippingDetails,
+    });
+
+    await notifyAdminViaEmail({
+      ...orderDetails,
+      checkoutId: checkout.id,
     });
 
     return {
@@ -190,6 +194,63 @@ const createCheckout = async ({
   console.log(response.body.data);
 
   return response.body.data as unknown as CheckoutResponse;
+};
+
+const notifyAdminViaEmail = async (orderDetails: {
+  checkoutId: string;
+  totalAmount: number;
+  shippingDetails: ShippingFormData;
+  merchantReferenceId: string;
+  items: Awaited<ReturnType<typeof getCartItems>>;
+}) => {
+  const emailUser = process.env.EMAIL_USER;
+  const emailAppPassword = process.env.EMAIL_APP_PASSWORD;
+
+  if (!emailUser || !emailAppPassword) {
+    throw new Error("Email configuration is missing");
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: emailUser,
+      pass: emailAppPassword,
+    },
+  });
+
+  const itemsList = orderDetails.items
+    .map(
+      (item) =>
+        `${item.product.name} - ${item.variant.name} x${item.quantity} - ${
+          item.variant.price_adjustment ?? item.product.base_price
+        } ISK`
+    )
+    .join("\n");
+
+  const mailOptions = {
+    from: emailUser,
+    to: emailUser,
+    subject: `New Order #${orderDetails.merchantReferenceId}`,
+    html: `
+      <h2>New Order Received</h2>
+      <p><strong>Order ID:</strong> ${orderDetails.merchantReferenceId}</p>
+      <p><strong>Checkout ID:</strong> ${orderDetails.checkoutId}</p>
+      <p><strong>Total Amount:</strong> ${orderDetails.totalAmount} ISK</p>
+      
+      <h3>Customer Details</h3>
+      <p><strong>Name:</strong> ${orderDetails.shippingDetails.firstName} ${orderDetails.shippingDetails.lastName}</p>
+      <p><strong>Email:</strong> ${orderDetails.shippingDetails.email}</p>
+      <p><strong>Kennitala:</strong> ${orderDetails.shippingDetails.kennitala}</p>
+      <p><strong>Address:</strong> ${orderDetails.shippingDetails.address}</p>
+      <p><strong>Apartment:</strong> ${orderDetails.shippingDetails.apartment}</p>
+      <p><strong>City:</strong> ${orderDetails.shippingDetails.city}</p>
+      
+      <h3>Order Items</h3>
+      <pre>${itemsList}</pre>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
 };
 
 export type { CheckoutResponse, CreateCheckoutParams };

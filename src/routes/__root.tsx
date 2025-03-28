@@ -15,16 +15,25 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
+import { ThemeProvider } from "next-themes";
 import * as React from "react";
 import { Toaster } from "sonner";
-import { useLocalStorage } from "usehooks-ts";
-import { ThemeProvider } from "next-themes";
 
 const fetchUser = createServerFn({ method: "GET" }).handler(async () => {
   const supabase = await getSupabaseServerClient();
   const { data, error: _error } = await supabase.auth.getUser();
 
-  if (!data.user?.email) {
+  if (!data.user?.id) {
+    return null;
+  }
+
+  const userProfile = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", data.user.id)
+    .single();
+
+  if (!userProfile?.data) {
     return null;
   }
 
@@ -32,7 +41,7 @@ const fetchUser = createServerFn({ method: "GET" }).handler(async () => {
     id: data.user.id,
     name: data.user.user_metadata.name,
     email: data.user.email,
-    role: data.user.user_metadata.role,
+    profile: userProfile.data,
   };
 });
 
@@ -141,7 +150,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             </nav>
-            <hr />
             {children}
             <TanStackRouterDevtools position="bottom-right" />
             <Scripts />

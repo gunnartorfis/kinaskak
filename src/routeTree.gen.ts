@@ -11,23 +11,17 @@
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
-import { Route as SignupImport } from './routes/signup'
 import { Route as LogoutImport } from './routes/logout'
 import { Route as LoginImport } from './routes/login'
 import { Route as AuthedImport } from './routes/_authed'
 import { Route as IndexImport } from './routes/index'
 import { Route as ProductsHandleImport } from './routes/products.$handle'
-import { Route as AuthedOrdersImport } from './routes/_authed/orders'
+import { Route as AuthedOrdersImport } from './routes/_authed/_orders'
 import { Route as CheckoutCartIdInformationImport } from './routes/checkout.$cartId.information'
-import { Route as AuthedOrdersOrderIdImport } from './routes/_authed/orders.$orderId'
+import { Route as AuthedOrdersOrdersRouteImport } from './routes/_authed/_orders/orders/route'
+import { Route as AuthedOrdersOrdersOrderIdImport } from './routes/_authed/_orders/orders/$orderId'
 
 // Create/Update Routes
-
-const SignupRoute = SignupImport.update({
-  id: '/signup',
-  path: '/signup',
-  getParentRoute: () => rootRoute,
-} as any)
 
 const LogoutRoute = LogoutImport.update({
   id: '/logout',
@@ -59,8 +53,7 @@ const ProductsHandleRoute = ProductsHandleImport.update({
 } as any)
 
 const AuthedOrdersRoute = AuthedOrdersImport.update({
-  id: '/orders',
-  path: '/orders',
+  id: '/_orders',
   getParentRoute: () => AuthedRoute,
 } as any)
 
@@ -70,10 +63,16 @@ const CheckoutCartIdInformationRoute = CheckoutCartIdInformationImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
-const AuthedOrdersOrderIdRoute = AuthedOrdersOrderIdImport.update({
+const AuthedOrdersOrdersRouteRoute = AuthedOrdersOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
+  getParentRoute: () => AuthedOrdersRoute,
+} as any)
+
+const AuthedOrdersOrdersOrderIdRoute = AuthedOrdersOrdersOrderIdImport.update({
   id: '/$orderId',
   path: '/$orderId',
-  getParentRoute: () => AuthedOrdersRoute,
+  getParentRoute: () => AuthedOrdersOrdersRouteRoute,
 } as any)
 
 // Populate the FileRoutesByPath interface
@@ -108,17 +107,10 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LogoutImport
       parentRoute: typeof rootRoute
     }
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupImport
-      parentRoute: typeof rootRoute
-    }
-    '/_authed/orders': {
-      id: '/_authed/orders'
-      path: '/orders'
-      fullPath: '/orders'
+    '/_authed/_orders': {
+      id: '/_authed/_orders'
+      path: ''
+      fullPath: ''
       preLoaderRoute: typeof AuthedOrdersImport
       parentRoute: typeof AuthedImport
     }
@@ -129,11 +121,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductsHandleImport
       parentRoute: typeof rootRoute
     }
-    '/_authed/orders/$orderId': {
-      id: '/_authed/orders/$orderId'
-      path: '/$orderId'
-      fullPath: '/orders/$orderId'
-      preLoaderRoute: typeof AuthedOrdersOrderIdImport
+    '/_authed/_orders/orders': {
+      id: '/_authed/_orders/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof AuthedOrdersOrdersRouteImport
       parentRoute: typeof AuthedOrdersImport
     }
     '/checkout/$cartId/information': {
@@ -143,17 +135,38 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CheckoutCartIdInformationImport
       parentRoute: typeof rootRoute
     }
+    '/_authed/_orders/orders/$orderId': {
+      id: '/_authed/_orders/orders/$orderId'
+      path: '/$orderId'
+      fullPath: '/orders/$orderId'
+      preLoaderRoute: typeof AuthedOrdersOrdersOrderIdImport
+      parentRoute: typeof AuthedOrdersOrdersRouteImport
+    }
   }
 }
 
 // Create and export the route tree
 
+interface AuthedOrdersOrdersRouteRouteChildren {
+  AuthedOrdersOrdersOrderIdRoute: typeof AuthedOrdersOrdersOrderIdRoute
+}
+
+const AuthedOrdersOrdersRouteRouteChildren: AuthedOrdersOrdersRouteRouteChildren =
+  {
+    AuthedOrdersOrdersOrderIdRoute: AuthedOrdersOrdersOrderIdRoute,
+  }
+
+const AuthedOrdersOrdersRouteRouteWithChildren =
+  AuthedOrdersOrdersRouteRoute._addFileChildren(
+    AuthedOrdersOrdersRouteRouteChildren,
+  )
+
 interface AuthedOrdersRouteChildren {
-  AuthedOrdersOrderIdRoute: typeof AuthedOrdersOrderIdRoute
+  AuthedOrdersOrdersRouteRoute: typeof AuthedOrdersOrdersRouteRouteWithChildren
 }
 
 const AuthedOrdersRouteChildren: AuthedOrdersRouteChildren = {
-  AuthedOrdersOrderIdRoute: AuthedOrdersOrderIdRoute,
+  AuthedOrdersOrdersRouteRoute: AuthedOrdersOrdersRouteRouteWithChildren,
 }
 
 const AuthedOrdersRouteWithChildren = AuthedOrdersRoute._addFileChildren(
@@ -173,26 +186,24 @@ const AuthedRouteWithChildren =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '': typeof AuthedRouteWithChildren
+  '': typeof AuthedOrdersRouteWithChildren
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
-  '/signup': typeof SignupRoute
-  '/orders': typeof AuthedOrdersRouteWithChildren
   '/products/$handle': typeof ProductsHandleRoute
-  '/orders/$orderId': typeof AuthedOrdersOrderIdRoute
+  '/orders': typeof AuthedOrdersOrdersRouteRouteWithChildren
   '/checkout/$cartId/information': typeof CheckoutCartIdInformationRoute
+  '/orders/$orderId': typeof AuthedOrdersOrdersOrderIdRoute
 }
 
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '': typeof AuthedRouteWithChildren
+  '': typeof AuthedOrdersRouteWithChildren
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
-  '/signup': typeof SignupRoute
-  '/orders': typeof AuthedOrdersRouteWithChildren
   '/products/$handle': typeof ProductsHandleRoute
-  '/orders/$orderId': typeof AuthedOrdersOrderIdRoute
+  '/orders': typeof AuthedOrdersOrdersRouteRouteWithChildren
   '/checkout/$cartId/information': typeof CheckoutCartIdInformationRoute
+  '/orders/$orderId': typeof AuthedOrdersOrdersOrderIdRoute
 }
 
 export interface FileRoutesById {
@@ -201,11 +212,11 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
-  '/signup': typeof SignupRoute
-  '/_authed/orders': typeof AuthedOrdersRouteWithChildren
+  '/_authed/_orders': typeof AuthedOrdersRouteWithChildren
   '/products/$handle': typeof ProductsHandleRoute
-  '/_authed/orders/$orderId': typeof AuthedOrdersOrderIdRoute
+  '/_authed/_orders/orders': typeof AuthedOrdersOrdersRouteRouteWithChildren
   '/checkout/$cartId/information': typeof CheckoutCartIdInformationRoute
+  '/_authed/_orders/orders/$orderId': typeof AuthedOrdersOrdersOrderIdRoute
 }
 
 export interface FileRouteTypes {
@@ -215,33 +226,31 @@ export interface FileRouteTypes {
     | ''
     | '/login'
     | '/logout'
-    | '/signup'
-    | '/orders'
     | '/products/$handle'
-    | '/orders/$orderId'
+    | '/orders'
     | '/checkout/$cartId/information'
+    | '/orders/$orderId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | ''
     | '/login'
     | '/logout'
-    | '/signup'
-    | '/orders'
     | '/products/$handle'
-    | '/orders/$orderId'
+    | '/orders'
     | '/checkout/$cartId/information'
+    | '/orders/$orderId'
   id:
     | '__root__'
     | '/'
     | '/_authed'
     | '/login'
     | '/logout'
-    | '/signup'
-    | '/_authed/orders'
+    | '/_authed/_orders'
     | '/products/$handle'
-    | '/_authed/orders/$orderId'
+    | '/_authed/_orders/orders'
     | '/checkout/$cartId/information'
+    | '/_authed/_orders/orders/$orderId'
   fileRoutesById: FileRoutesById
 }
 
@@ -250,7 +259,6 @@ export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren
   LoginRoute: typeof LoginRoute
   LogoutRoute: typeof LogoutRoute
-  SignupRoute: typeof SignupRoute
   ProductsHandleRoute: typeof ProductsHandleRoute
   CheckoutCartIdInformationRoute: typeof CheckoutCartIdInformationRoute
 }
@@ -260,7 +268,6 @@ const rootRouteChildren: RootRouteChildren = {
   AuthedRoute: AuthedRouteWithChildren,
   LoginRoute: LoginRoute,
   LogoutRoute: LogoutRoute,
-  SignupRoute: SignupRoute,
   ProductsHandleRoute: ProductsHandleRoute,
   CheckoutCartIdInformationRoute: CheckoutCartIdInformationRoute,
 }
@@ -279,7 +286,6 @@ export const routeTree = rootRoute
         "/_authed",
         "/login",
         "/logout",
-        "/signup",
         "/products/$handle",
         "/checkout/$cartId/information"
       ]
@@ -290,7 +296,7 @@ export const routeTree = rootRoute
     "/_authed": {
       "filePath": "_authed.tsx",
       "children": [
-        "/_authed/orders"
+        "/_authed/_orders"
       ]
     },
     "/login": {
@@ -299,25 +305,29 @@ export const routeTree = rootRoute
     "/logout": {
       "filePath": "logout.tsx"
     },
-    "/signup": {
-      "filePath": "signup.tsx"
-    },
-    "/_authed/orders": {
-      "filePath": "_authed/orders.tsx",
+    "/_authed/_orders": {
+      "filePath": "_authed/_orders.tsx",
       "parent": "/_authed",
       "children": [
-        "/_authed/orders/$orderId"
+        "/_authed/_orders/orders"
       ]
     },
     "/products/$handle": {
       "filePath": "products.$handle.tsx"
     },
-    "/_authed/orders/$orderId": {
-      "filePath": "_authed/orders.$orderId.tsx",
-      "parent": "/_authed/orders"
+    "/_authed/_orders/orders": {
+      "filePath": "_authed/_orders/orders/route.tsx",
+      "parent": "/_authed/_orders",
+      "children": [
+        "/_authed/_orders/orders/$orderId"
+      ]
     },
     "/checkout/$cartId/information": {
       "filePath": "checkout.$cartId.information.tsx"
+    },
+    "/_authed/_orders/orders/$orderId": {
+      "filePath": "_authed/_orders/orders/$orderId.tsx",
+      "parent": "/_authed/_orders/orders"
     }
   }
 }

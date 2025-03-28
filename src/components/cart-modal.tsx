@@ -41,6 +41,7 @@ export default function CartModal() {
         aria-label="Open cart"
         onClick={openCart}
         className="relative"
+        type="button"
       >
         <ShoppingCartIcon className="h-6" />
         {cartTotals.totalQuantity > 0 && (

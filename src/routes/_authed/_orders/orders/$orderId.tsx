@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { fetchOrder } from "@/serverFns/orders";
 
-export const Route = createFileRoute("/_authed/orders/$orderId")({
+export const Route = createFileRoute("/_authed/_orders/orders/$orderId")({
   loader: ({ params }) =>
     fetchOrder({
       data: params.orderId,

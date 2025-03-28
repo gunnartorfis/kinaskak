@@ -6,14 +6,9 @@ import {
   redirect,
 } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/_authed/orders")({
+export const Route = createFileRoute("/_authed/_orders/orders")({
   loader: () => fetchOrders(),
   component: OrdersComponent,
-  beforeLoad: ({ context }) => {
-    if (context.user?.role !== "admin") {
-      throw redirect({ to: "/" });
-    }
-  },
 });
 
 function OrdersComponent() {

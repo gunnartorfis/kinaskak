@@ -12,7 +12,7 @@ function RouteComponent() {
   const { cartId } = useParams({ from: "/checkout/$cartId/information" });
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 pb-16 pt-8  lg:t-16 max-w-screen-lg mx-auto">
+    <div className="flex flex-col lg:flex-row gap-8 px-4 lg:px-0 pb-16 pt-8 lg:t-16 max-w-screen-lg mx-auto">
       <div className="flex-1">
         <ShippingForm cartId={cartId} />
       </div>
