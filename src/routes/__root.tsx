@@ -12,6 +12,7 @@ import {
   Outlet,
   Scripts,
   createRootRoute,
+  redirect,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
@@ -85,6 +86,11 @@ export const Route = createRootRoute({
     ],
   }),
   beforeLoad: async () => {
+    // temporarily redirect to our Facebook page
+    throw redirect({
+      href: "https://www.facebook.com/profile.php?id=61575878091177",
+    });
+
     const user = await fetchUser();
 
     return {
