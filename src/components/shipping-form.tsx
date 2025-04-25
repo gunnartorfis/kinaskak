@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { redirectToCheckout } from "@/serverFns/checkout";
+import { handleCheckout } from "@/serverFns/checkout";
 import { useNavigate } from "@tanstack/react-router";
 import { useState, type FC } from "react";
 import { toast } from "sonner";
@@ -13,7 +13,6 @@ interface ShippingFormProps {
 
 const ShippingForm: FC<ShippingFormProps> = ({ cartId }) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const nav = useNavigate();
 
   return (
     <form
@@ -21,20 +20,17 @@ const ShippingForm: FC<ShippingFormProps> = ({ cartId }) => {
       onSubmit={async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target as HTMLFormElement);
+        let redirectUrl: string | undefined;
         try {
           const { marketingOptIn, ...rest } = Object.fromEntries(formData);
-          const { redirectUrl } = await redirectToCheckout({
+          const checkout = await handleCheckout({
             data: {
               cartId,
               marketingOptIn: marketingOptIn === "on",
               ...rest,
             },
           });
-
-          nav({
-            href: redirectUrl,
-            reloadDocument: true,
-          });
+          redirectUrl = checkout.redirectUrl;
         } catch (error) {
           const errors: Record<string, string> = {};
           const allErrors = Object.values(error as ZodError)[0] as {
@@ -52,6 +48,13 @@ const ShippingForm: FC<ShippingFormProps> = ({ cartId }) => {
           }
 
           setErrors(errors);
+          console.log("errors", errors);
+          return;
+        }
+
+        console.log("redirectUrl", redirectUrl);
+        if (redirectUrl) {
+          window.location.replace(redirectUrl);
         }
       }}
     >

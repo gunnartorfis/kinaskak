@@ -7,10 +7,14 @@ import {
 } from "@/lib/validations/shipping";
 import { getCartItems } from "@/serverFns/cart";
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
 import nodemailer from "nodemailer";
+import { z } from "zod";
 
-export const redirectToCheckout = createServerFn({ method: "POST" })
+const Redirect = z.object({
+  redirectUrl: z.string(),
+});
+
+export const handleCheckout = createServerFn({ method: "POST" })
   .validator((data: unknown) =>
     shippingFormSchema.extend({ cartId: z.string() }).parse(data)
   )
@@ -57,14 +61,22 @@ export const redirectToCheckout = createServerFn({ method: "POST" })
       shippingDetails,
     });
 
-    await notifyAdminViaEmail({
-      ...orderDetails,
-      checkoutId: checkout.id,
-    });
+    console.log("checkout redirect", checkout.redirect_url);
 
     return {
       redirectUrl: `${checkout.redirect_url}?checkoutId=${checkoutRecord.id}`,
     };
+
+    // try {
+    //   await notifyAdminViaEmail({
+    //     data: {
+    //       ...orderDetails,
+    //       checkoutId: checkout.id,
+    //     },
+    //   });
+    // } catch (error) {
+    //   console.error(error);
+    // }
   });
 
 const getBaseCheckoutRedirectUrl = () => {
@@ -191,47 +203,49 @@ const createCheckout = async ({
     body: checkoutBody,
   });
 
-  console.log(response.body.data);
-
   return response.body.data as unknown as CheckoutResponse;
 };
 
-const notifyAdminViaEmail = async (orderDetails: {
-  checkoutId: string;
-  totalAmount: number;
-  shippingDetails: ShippingFormData;
-  merchantReferenceId: string;
-  items: Awaited<ReturnType<typeof getCartItems>>;
-}) => {
-  const emailUser = process.env.EMAIL_USER;
-  const emailAppPassword = process.env.EMAIL_APP_PASSWORD;
+const NotifyAdmin = z.object({
+  checkoutId: z.string(),
+  totalAmount: z.number(),
+  shippingDetails: shippingFormSchema,
+  merchantReferenceId: z.string(),
+  items: z.array(z.any()),
+});
 
-  if (!emailUser || !emailAppPassword) {
-    throw new Error("Email configuration is missing");
-  }
+const notifyAdminViaEmail = createServerFn()
+  .validator((data: unknown) => NotifyAdmin.parse(data))
+  .handler(async ({ data: orderDetails }) => {
+    const emailUser = process.env.EMAIL_USER;
+    const emailAppPassword = process.env.EMAIL_APP_PASSWORD;
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: emailUser,
-      pass: emailAppPassword,
-    },
-  });
+    if (!emailUser || !emailAppPassword) {
+      throw new Error("Email configuration is missing");
+    }
 
-  const itemsList = orderDetails.items
-    .map(
-      (item) =>
-        `${item.product.name} - ${item.variant.name} x${item.quantity} - ${
-          item.variant.price_adjustment ?? item.product.base_price
-        } ISK`
-    )
-    .join("\n");
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: emailUser,
+        pass: emailAppPassword,
+      },
+    });
 
-  const mailOptions = {
-    from: emailUser,
-    to: emailUser,
-    subject: `New Order #${orderDetails.merchantReferenceId}`,
-    html: `
+    const itemsList = orderDetails.items
+      .map(
+        (item) =>
+          `${item.product.name} - ${item.variant.name} x${item.quantity} - ${
+            item.variant.price_adjustment ?? item.product.base_price
+          } ISK`
+      )
+      .join("\n");
+
+    const mailOptions = {
+      from: emailUser,
+      to: emailUser,
+      subject: `New Order #${orderDetails.merchantReferenceId}`,
+      html: `
       <h2>New Order Received</h2>
       <p><strong>Order ID:</strong> ${orderDetails.merchantReferenceId}</p>
       <p><strong>Checkout ID:</strong> ${orderDetails.checkoutId}</p>
@@ -248,9 +262,9 @@ const notifyAdminViaEmail = async (orderDetails: {
       <h3>Order Items</h3>
       <pre>${itemsList}</pre>
     `,
-  };
+    };
 
-  await transporter.sendMail(mailOptions);
-};
+    await transporter.sendMail(mailOptions);
+  });
 
 export type { CheckoutResponse, CreateCheckoutParams };

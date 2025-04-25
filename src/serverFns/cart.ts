@@ -10,11 +10,26 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const AddToCartSchema = z.object({
-  cartId: z.string().optional(),
+  cartId: z.string().nullable().optional(),
   productId: z.string(),
   variantId: z.string(),
   quantityChange: z.number(),
 });
+
+const createCart = async () => {
+  const supabase = await getSupabaseServerClient();
+  const { data: cart } = await supabase
+    .from("carts")
+    .insert({})
+    .select()
+    .single();
+
+  if (!cart) {
+    throw new Error("Cart not found");
+  }
+
+  return cart;
+};
 
 // product_id and variant_id are unique together so we can query by them
 // if those don't exist, we can insert them with quantity 1, otherwise we can update the quantity
@@ -26,29 +41,27 @@ export const upsertCartItem = createServerFn({ method: "POST" })
 
     const existingCartId = await getCartIdServer();
 
+    let cartId: string | null = null;
+    if (!existingCartId) {
+      cartId = (await createCart()).id;
+    }
+
     const supabase = await getSupabaseServerClient();
+
+    if (!cartId) {
+      throw new Error("Cart ID not found");
+    }
 
     const { data: existingCartItem } = await supabase
       .from("cart_items")
       .select("*")
-      .eq("cart_id", existingCartId)
+      .eq("cart_id", cartId)
       .eq("product_id", productId)
       .eq("variant_id", variantId)
       .single();
 
-    let cartId: string;
     if (!existingCartItem) {
-      const { data: cart } = await supabase
-        .from("carts")
-        .insert({})
-        .select()
-        .single();
-
-      if (!cart) {
-        throw new Error("Cart not found");
-      }
-
-      cartId = cart.id;
+      cartId = (await createCart()).id;
     } else if (!existingCartItem.cart_id) {
       throw new Error("Cart item does not have a cart");
     } else {
@@ -69,16 +82,16 @@ export const upsertCartItem = createServerFn({ method: "POST" })
         return {
           cartId,
         };
-      } else {
-        const { data: cartItem } = await supabase
-          .from("cart_items")
-          .update({ quantity: newQuantity })
-          .eq("id", existingCartItem.id)
-          .select()
-          .single();
-
-        return { cartItem, cartId };
       }
+
+      const { data: cartItem } = await supabase
+        .from("cart_items")
+        .update({ quantity: newQuantity })
+        .eq("id", existingCartItem.id)
+        .select()
+        .single();
+
+      return { cartItem, cartId };
     }
 
     const { data: cartItem } = await supabase
@@ -148,31 +161,49 @@ export const getCartItems = createServerFn({ method: "GET" })
       throw new Error("Cart items not found");
     }
 
+    const productIds = cartItems
+      .map((item) => item.product_id)
+      .filter((id): id is string => id !== null);
+
+    const variantIds = cartItems
+      .map((item) => item.variant_id)
+      .filter((id): id is string => id !== null);
+
     const { data: products } = await supabase
       .from("products")
       .select("*")
-      .in(
-        "id",
-        cartItems.map((item) => item.product_id)
-      );
+      .in("id", productIds);
 
     const { data: variants } = await supabase
       .from("product_variants")
       .select("*")
-      .in(
-        "id",
-        cartItems.map((item) => item.variant_id)
-      );
+      .in("id", variantIds);
 
     if (!products || !variants) {
       throw new Error("Products or variants not found");
     }
 
-    const items: ExpandedCartItem[] = cartItems.map((item) => ({
-      ...item,
-      product: products.find((product) => product.id === item.product_id),
-      variant: variants.find((variant) => variant.id === item.variant_id),
-    }));
+    const items: ExpandedCartItem[] = cartItems
+      .filter(
+        (
+          item
+        ): item is typeof item & { product_id: string; variant_id: string } =>
+          item.product_id !== null && item.variant_id !== null
+      )
+      .map((item) => {
+        const product = products.find((p) => p.id === item.product_id);
+        const variant = variants.find((v) => v.id === item.variant_id);
+
+        if (!product || !variant) {
+          throw new Error("Product or variant not found");
+        }
+
+        return {
+          ...item,
+          product,
+          variant,
+        };
+      });
 
     return items;
   });
